@@ -9,6 +9,6 @@
   "author": "Nick Knight",
   "license": "ISC",
   "dependencies": {
-    "config": "^3.3.4"
+    "config": "^3.3.6"
   }
 }

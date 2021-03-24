@@ -8,12 +8,19 @@ const port = 8000
 
 /*
 You will require a /config/default.json:
-
 {
   "devweb": {
-    "localwebroot": "/home/nick/workspace/babble_web/babblevoice",
-    "proxyhost": "https://www.babblevoice.com",
-    "accesstoken": ""
+    "localwebroot": "C:/Users/Bueno/Documents/GitHub/arit-calendar/out",
+    "proxyhost": "www.aroomintown.com",
+    "accesstoken": "b225dfc4466f7cad0c519d6082703b1943b335fa",
+    "addressredirects" : {
+      "/a/": "/calendar/"
+    },
+    "mimemap": {
+      ".js": "application/javascript",
+      ".html": "text/html",
+      ".css": "text/css"
+    }
   }
 }
 */
@@ -21,18 +28,22 @@ You will require a /config/default.json:
 const localwebroot = config.get( "devweb.localwebroot" )
 const weblocation = config.get( "devweb.proxyhost" )
 const accesstoken = config.get( "devweb.accesstoken" )
+const addressredirects = config.get( "devweb.addressredirects" )
+const mimemap = config.get( "devweb.mimemap" )
 
-const mimemap = {
-  ".js": "application/javascript",
-  ".html": "text/html",
-  ".css": "text/css"
-}
-
-function proxrequest( req, res ) {
-
-  https.get( weblocation + req.url, ( resp ) => {
-
-    //console.log( resp )
+function proxgetrequest( req, res ) {
+  //GET verb only
+  const options = {
+    host: weblocation,
+    path: req.url,
+    method: "GET",
+    headers: {
+      'Authorization': `Bearer ${accesstoken}`
+    }
+  }
+  var httpsreq = https.request(options, (resp) => {
+    console.log('statusCode:', resp.statusCode)
+    console.log('headers:', resp.headers)
     if( 404 === resp.statusCode ) {
       res.writeHead( 404 )
       res.end( "Not found on remote" )
@@ -46,28 +57,90 @@ function proxrequest( req, res ) {
     resp.on( "data", ( chunk ) => {
       res.write( chunk )
     } )
-
     // The whole response has been received. Print out the result.
     resp.on( "end", () => {
       res.end( () => {} )
     } )
-
-  } ).on( "error", ( err ) => {
+  } )
+  httpsreq.on( "error", ( err ) => {
     res.writeHead( 500 )
     res.end( "Sorry" )
   } )
+  httpsreq.end()
+}
+
+function proxrequest( req, res, data ) {
+  //handles POST, PUT and DELETE
+  options = {
+    host: weblocation,
+    path: req.url,
+    method: req.method,
+    headers: {
+      'Authorization': `Bearer ${accesstoken}`,
+      'Content-Type': req.headers["content-type"],
+      'Content-Length': req.headers["content-length"]
+    }
+  }
+  var httpsreq = https.request(options, (resp) => {
+    console.log('statusCode:', resp.statusCode)
+    console.log('headers:', resp.headers)
+    if( 404 === resp.statusCode ) {
+      res.writeHead( 404 )
+      res.end( "Not found on remote" )
+      return
+    }
+    res.setHeader( "Content-Type", resp.headers[ "content-type" ] )
+    res.setHeader( "Cache-Control", "public, max-age=0" );
+    res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
+
+    resp.on( "data", ( chunk ) => {
+      res.write( chunk )
+    } )
+    // The whole response has been received. Print out the result.
+    resp.on( "end", () => {
+      res.end( () => {} )
+    } )
+  } )
+  httpsreq.on( "error", ( err ) => {
+    res.writeHead( 500 )
+    res.end( "Sorry" )
+  } )
+  httpsreq.write(data)
+  httpsreq.end()
+}
+
+function redirectaddress( addr ) {
+  for (key in addressredirects) {
+    if( 0 == addr.indexOf( key ) ) {
+      addr = addr.replace( key, addressredirects[ key ] );
+    }
+  }
+  return addr
 }
 
 const server = http.createServer( function ( req, res ) {
 
-  let actualfile = req.url
+  let actualfile = redirectaddress( req.url )
   if( "/" == actualfile.slice( -1 ) ) actualfile += "index.html"
 
   fs.readFile( localwebroot + actualfile, "utf8", function ( err, data ) {
+
     if ( err ) {
       console.log( `Received a request for ${req.url} but need to request from our server` )
-      proxrequest( req, res )
-      return
+
+      if( "GET" == req.method ) {
+        proxgetrequest( req, res )
+        return
+      } else {
+        let data = '';
+        req.on('data', chunk => {
+          data += chunk;
+        })
+        req.on('end', () => {
+          proxrequest( req, res, data )
+        })
+        return
+      }
     }
 
     console.log( `Received a request for ${req.url} and we have a local copy we can use` )
