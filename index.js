@@ -12,7 +12,7 @@ You will require a /config/default.json:
   "devweb": {
     "localwebroot": "C:/Users/Bueno/Documents/GitHub/arit-calendar/out",
     "proxyhost": "www.aroomintown.com",
-    "rittoken": "b225dfc4466f7cad0c519d6082703b1943b335fa",
+    "accesstoken": "b225dfc4466f7cad0c519d6082703b1943b335fa",
     "addressredirects" : {
       "/a/": "/calendar/"
     },
@@ -27,7 +27,7 @@ You will require a /config/default.json:
 
 const localwebroot = config.get( "devweb.localwebroot" )
 const weblocation = config.get( "devweb.proxyhost" )
-const rittoken = config.get( "devweb.rittoken" )
+const accesstoken = config.get( "devweb.accesstoken" )
 const addressredirects = config.get( "devweb.addressredirects" )
 const mimemap = config.get( "devweb.mimemap" )
 
@@ -38,7 +38,7 @@ function proxgetrequest( req, res ) {
     path: req.url,
     method: "GET",
     headers: {
-      'Authorization': `Bearer ${rittoken}`
+      'Authorization': `Bearer ${accesstoken}`
     }
   }
   var httpsreq = https.request(options, (resp) => {
@@ -76,7 +76,7 @@ function proxrequest( req, res, data ) {
     path: req.url,
     method: req.method,
     headers: {
-      'Authorization': `Bearer ${rittoken}`,
+      'Authorization': `Bearer ${accesstoken}`,
       'Content-Type': req.headers["content-type"],
       'Content-Length': req.headers["content-length"]
     }
