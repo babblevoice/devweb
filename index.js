@@ -10,24 +10,26 @@ const port = 8000
 You will require a /config/default.json:
 {
   "devweb": {
-    "localwebroot": "/home/nick/workspace/babble_web/babblevoice",
-    "proxyhost": "https://www.babblevoice.com",
-    "accesstoken": ""
+    "localwebroot": "C:/Users/Bueno/Documents/GitHub/arit-calendar/out",
+    "proxyhost": "www.aroomintown.com",
+    "rittoken": "b225dfc4466f7cad0c519d6082703b1943b335fa",
+    "addressredirects" : {
+      "/a/": "/calendar/"
+    },
+    "mimemap": {
+      ".js": "application/javascript",
+      ".html": "text/html",
+      ".css": "text/css"
+    }
   }
 }
 */
 
 const localwebroot = config.get( "devweb.localwebroot" )
 const weblocation = config.get( "devweb.proxyhost" )
-const accesstoken = config.get( "devweb.accesstoken" )
-
-const mimemap = {
-  ".js": "application/javascript",
-  ".html": "text/html",
-  ".css": "text/css"
-}
-
-const rit_token = "76d240775930f218b59a837e7210382201cdfa06"
+const rittoken = config.get( "devweb.rittoken" )
+const addressredirects = config.get( "devweb.addressredirects" )
+const mimemap = config.get( "devweb.mimemap" )
 
 function proxgetrequest( req, res ) {
   //GET verb only
@@ -36,7 +38,7 @@ function proxgetrequest( req, res ) {
     path: req.url,
     method: "GET",
     headers: {
-      'Authorization': `Bearer ${rit_token}`
+      'Authorization': `Bearer ${rittoken}`
     }
   }
   var httpsreq = https.request(options, (resp) => {
@@ -74,7 +76,7 @@ function proxrequest( req, res, data ) {
     path: req.url,
     method: req.method,
     headers: {
-      'Authorization': `Bearer ${rit_token}`,
+      'Authorization': `Bearer ${rittoken}`,
       'Content-Type': req.headers["content-type"],
       'Content-Length': req.headers["content-length"]
     }
@@ -107,12 +109,18 @@ function proxrequest( req, res, data ) {
   httpsreq.end()
 }
 
+function redirectaddress( addr ) {
+  for (key in addressredirects) {
+    if( 0 == addr.indexOf( key ) ) {
+      addr = addr.replace( key, addressredirects[ key ] );
+    }
+  }
+  return addr
+}
+
 const server = http.createServer( function ( req, res ) {
 
-  let actualfile = req.url
-  if( 0 == actualfile.indexOf( "/a/" ) ) {
-    actualfile = actualfile.replace( "/a/", "/calendar/" );
-  }
+  let actualfile = redirectaddress( req.url )
   if( "/" == actualfile.slice( -1 ) ) actualfile += "index.html"
 
   fs.readFile( localwebroot + actualfile, "utf8", function ( err, data ) {
