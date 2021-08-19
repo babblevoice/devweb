@@ -20,7 +20,8 @@ const port = 8000
         ".js": "application/javascript",
         ".html": "text/html",
         ".css": "text/css"
-      }
+      },
+      "servicefilepath": "./services.js"
     }
   }
 */
@@ -30,6 +31,7 @@ const weblocation = config.get( "devweb.proxyhost" )
 const accesstoken = config.get( "devweb.accesstoken" )
 const addressredirects = config.get( "devweb.addressredirects" )
 const mimemap = config.get( "devweb.mimemap" )
+const servicefilepath = config.get ( "devweb.servicefilepath" )
 
 /*
   Services can be provided in a /services.js:
@@ -42,7 +44,7 @@ const mimemap = config.get( "devweb.mimemap" )
 
 let services = { available: {} };
 
-fs.access( "./services.js"  )
+fs.access( servicefilepath  )
   .then( res => {
     console.log( "Including services.js." )
     services = require( "./services.js" )
