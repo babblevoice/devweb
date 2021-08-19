@@ -1,28 +1,28 @@
 const http = require( "http" )
 const https = require( "https" )
-const fs = require( "fs" )
+const fs = require( "fs" ).promises
 const config = require( "config" )
 
 const host = "localhost"
 const port = 8000
 
 /*
-You will require a /config/default.json:
-{
-  "devweb": {
-    "localwebroot": "C:/Users/Bueno/Documents/GitHub/arit-calendar/out",
-    "proxyhost": "www.aroomintown.com",
-    "accesstoken": "b225dfc4466f7cad0c519d6082703b1943b335fa",
-    "addressredirects" : {
-      "/a/": "/calendar/"
-    },
-    "mimemap": {
-      ".js": "application/javascript",
-      ".html": "text/html",
-      ".css": "text/css"
+  You will require a /config/default.json:
+  {
+    "devweb": {
+      "localwebroot": "C:/Users/Bueno/Documents/GitHub/arit-calendar/out",
+      "proxyhost": "www.aroomintown.com",
+      "accesstoken": "b225dfc4466f7cad0c519d6082703b1943b335fa",
+      "addressredirects" : {
+        "/a/": "/calendar/"
+      },
+      "mimemap": {
+        ".js": "application/javascript",
+        ".html": "text/html",
+        ".css": "text/css"
+      }
     }
   }
-}
 */
 
 const localwebroot = config.get( "devweb.localwebroot" )
@@ -30,6 +30,26 @@ const weblocation = config.get( "devweb.proxyhost" )
 const accesstoken = config.get( "devweb.accesstoken" )
 const addressredirects = config.get( "devweb.addressredirects" )
 const mimemap = config.get( "devweb.mimemap" )
+
+/*
+  Services can be provided in a /services.js:
+  module.exports.available = {
+    service1Name: function() {
+      // return data
+    }
+  };
+*/
+
+let services = { available: {} };
+
+fs.access( "./services.js"  )
+  .then( res => {
+    console.log( "Including services.js." )
+    services = require( "./services.js" )
+  } )
+  .catch( err => {
+    console.log( "No services.js found." )
+  } )
 
 function proxgetrequest( req, res ) {
   //GET verb only
@@ -118,45 +138,58 @@ function redirectaddress( addr ) {
   return addr
 }
 
-const server = http.createServer( function ( req, res ) {
+const handleService = async function( req, res, service ) {
+  return await services.available[ service ]()
+}
 
-  let actualfile = redirectaddress( req.url )
-  if( "/" == actualfile.slice( -1 ) ) actualfile += "index.html"
-
-  fs.readFile( localwebroot + actualfile, "utf8", function ( err, data ) {
-
-    if ( err ) {
+const handleFileOrProxy = async function( req, res, filename ) {
+    try {
+      data = await fs.readFile( localwebroot + filename, "utf8" )
+      console.log( `Received a request for ${req.url} and we have a local copy we can use` )
+    } catch {
       console.log( `Received a request for ${req.url} but need to request from our server` )
-
       if( "GET" == req.method ) {
         proxgetrequest( req, res )
-        return
       } else {
         let data = '';
         req.on('data', chunk => {
           data += chunk;
-        })
+        } )
         req.on('end', () => {
           proxrequest( req, res, data )
-        })
-        return
+        } )
       }
+      return "proxied"
     }
+  return data
+  }
 
-    console.log( `Received a request for ${req.url} and we have a local copy we can use` )
+const server = http.createServer( async function ( req, res ) {
 
-    let filext = /(?:\.([^.]+))?$/.exec( req.url )
-    let mimetype = mimemap[ filext[ 0 ] ]
-    if( undefined === mimetype ) mimetype = "text/html"
+  let url = redirectaddress( req.url )
+  let data = "";
 
-    res.setHeader( "Content-Type", mimetype )
-    res.setHeader( "Cache-Control", "public, max-age=0" );
-    res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
+  // check whether service and call
+  if( url.slice( 1 ) in services.available ) {
+    data = await handleService( req, res, url.slice( 1 ) )
+  // get file or make proxy request
+  } else {
+    let filename = ( "/" == url ) ? url += "index.html" : url
+    data = await handleFileOrProxy( req, res, filename )
+  }
 
-    res.writeHead( 200 )
-    res.end( data )
+  if( "proxied" == data ) return
 
-  } )
+  let filext = /(?:\.([^.]+))?$/.exec( req.url )
+  let mimetype = mimemap[ filext[ 0 ] ]
+  if( undefined === mimetype ) mimetype = "text/html"
+
+  res.setHeader( "Content-Type", mimetype )
+  res.setHeader( "Cache-Control", "public, max-age=0" );
+  res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
+
+  res.writeHead( 200 )
+  res.end( data )
 
   console.log(req.url)
   console.log(req.method)

@@ -10,5 +10,12 @@
   "license": "ISC",
   "dependencies": {
     "config": "^3.3.6"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.12"
+  },
+  "nodemonConfig": {
+    "ext": "js,html,php",
+    "watch": "../"
   }
 }
