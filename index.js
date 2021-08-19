@@ -47,7 +47,7 @@ let services = { available: {} };
 fs.access( servicefilepath  )
   .then( res => {
     console.log( "Including services.js." )
-    services = require( "./services.js" )
+    services = require( servicefilepath )
   } )
   .catch( err => {
     console.log( "No services.js found." )
