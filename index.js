@@ -46,11 +46,11 @@ let services = { available: {} };
 
 fs.access( servicefilepath )
   .then( res => {
-    console.log( "Including services.js." )
+    console.log( "Including services.js" )
     services = require( servicefilepath )
   } )
   .catch( err => {
-    console.log( "No services.js found." )
+    console.log( "No services.js found" )
   } )
 
 function proxgetrequest( req, res ) {
@@ -142,25 +142,27 @@ function redirectaddress( addr ) {
 
 const getURLParts = function( url ) {
 
-  const halves = url.split( "?" )
-  if( 1 == halves.length ) return { route: halves[0] }
+  const hasQueryStr = url.includes( "?" )
 
   const parts = {
-    route: halves[ 0 ],
-    query: "?" + halves[ 1 ],
+    route: hasQueryStr ? url.slice( 0, url.indexOf( "?" ) ) : url,
+    query: hasQueryStr ? url.slice( url.indexOf( "?" ) ) : "",
     pairs: {}
   }
 
-  const pairs = halves[ 1 ].split( "&" )
-  pairs.forEach( pair => {
-    const items = pair.split( "=" )
-    parts.pairs[ items[ 0 ] ] = items[ 1 ]
-  } )
+  if( hasQueryStr ) {
+    const keyValPairs = parts.query.slice( 1 ).split( "&" )
+    keyValPairs.forEach( pair => {
+      const keyOrVal = pair.split( "=" )
+      parts.pairs[ keyOrVal[ 0 ] ] = keyOrVal[ 1 ]
+    } )
+  }
 
   return parts
 }
 
 const handleService = async function( req, res, service, parts ) {
+  console.log( `Calling service ${ service }` )
   return await services.available[ service ]( servicefilepath, parts, req.body )
 }
 
@@ -169,11 +171,11 @@ const handleFileOrProxy = async function( req, res, filename ) {
   try {
 
     data = await fs.readFile( localwebroot + filename, "utf8" )
-    console.log( `Received a request for ${req.url} and we have a local copy we can use` )
+    console.log( `Serving local copy of ${ filename.slice( 1 ) }` )
 
   } catch {
 
-    console.log( `Received a request for ${req.url} but need to request from our server` )
+    console.log( `Passing request to server` )
     if( "GET" == req.method ) {
       proxgetrequest( req, res )
     } else {
@@ -192,6 +194,8 @@ const handleFileOrProxy = async function( req, res, filename ) {
 }
 
 const server = http.createServer( async function ( req, res ) {
+
+  console.log( "Received request:", req.method, req.url )
 
   let url = redirectaddress( req.url )
   let data = "";
@@ -219,9 +223,6 @@ const server = http.createServer( async function ( req, res ) {
 
   res.writeHead( 200 )
   res.end( data )
-
-  console.log(req.url)
-  console.log(req.method)
 
 } )
 
