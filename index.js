@@ -44,7 +44,7 @@ const servicefilepath = config.get ( "devweb.servicefilepath" )
 
 let services = { available: {} };
 
-fs.access( servicefilepath  )
+fs.access( servicefilepath )
   .then( res => {
     console.log( "Including services.js." )
     services = require( servicefilepath )
@@ -140,40 +140,67 @@ function redirectaddress( addr ) {
   return addr
 }
 
-const handleService = async function( req, res, service ) {
-  return await services.available[ service ]()
+const getURLParts = function( url ) {
+
+  const halves = url.split( "?" )
+  if( 1 == halves.length ) return { route: halves[0] }
+
+  const parts = {
+    route: halves[ 0 ],
+    query: "?" + halves[ 1 ],
+    pairs: {}
+  }
+
+  const pairs = halves[ 1 ].split( "&" )
+  pairs.forEach( pair => {
+    const items = pair.split( "=" )
+    parts.pairs[ items[ 0 ] ] = items[ 1 ]
+  } )
+
+  return parts
+}
+
+const handleService = async function( req, res, service, parts ) {
+  return await services.available[ service ]( servicefilepath, parts, req.body )
 }
 
 const handleFileOrProxy = async function( req, res, filename ) {
-    try {
-      data = await fs.readFile( localwebroot + filename, "utf8" )
-      console.log( `Received a request for ${req.url} and we have a local copy we can use` )
-    } catch {
-      console.log( `Received a request for ${req.url} but need to request from our server` )
-      if( "GET" == req.method ) {
-        proxgetrequest( req, res )
-      } else {
-        let data = '';
-        req.on('data', chunk => {
-          data += chunk;
-        } )
-        req.on('end', () => {
-          proxrequest( req, res, data )
-        } )
-      }
-      return "proxied"
+
+  try {
+
+    data = await fs.readFile( localwebroot + filename, "utf8" )
+    console.log( `Received a request for ${req.url} and we have a local copy we can use` )
+
+  } catch {
+
+    console.log( `Received a request for ${req.url} but need to request from our server` )
+    if( "GET" == req.method ) {
+      proxgetrequest( req, res )
+    } else {
+      let data = '';
+      req.on('data', chunk => {
+        data += chunk;
+      } )
+      req.on('end', () => {
+        proxrequest( req, res, data )
+      } )
     }
-  return data
+    return "proxied"
   }
+
+  return data
+}
 
 const server = http.createServer( async function ( req, res ) {
 
   let url = redirectaddress( req.url )
   let data = "";
 
+  const parts = getURLParts( url )
+
   // check whether service and call
-  if( url.slice( 1 ) in services.available ) {
-    data = await handleService( req, res, url.slice( 1 ) )
+  if( parts.route.slice( 1 ) in services.available ) {
+    data = await handleService( req, res, parts.route.slice( 1 ), parts )
   // get file or make proxy request
   } else {
     let filename = ( "/" == url ) ? url += "index.html" : url
