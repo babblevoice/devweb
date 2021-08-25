@@ -46,7 +46,7 @@ let services = { available: {} };
 
 fs.access( servicefilepath )
   .then( res => {
-    console.log( "Including services.js" )
+    console.log( `Including services in file ${servicefilepath}` )
     services = require( servicefilepath )
   } )
   .catch( err => {
@@ -227,5 +227,5 @@ const server = http.createServer( async function ( req, res ) {
 } )
 
 server.listen( port, host, () => {
-  console.log( `Server is running on http://${host}:${port}` )
+  console.log( `Serving from directory ${localwebroot} at http://${host}:${port}` )
 } )
