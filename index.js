@@ -207,7 +207,7 @@ const server = http.createServer( async function ( req, res ) {
     data = await handleService( req, res, parts.route.slice( 1 ), parts )
   // get file or make proxy request
   } else {
-    let filename = ( "/" == url ) ? url += "index.html" : url
+    let filename = ( "/" == url ) ? url += "index.html" : parts.route
     data = await handleFileOrProxy( req, res, filename )
   }
 
