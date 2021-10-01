@@ -63,7 +63,7 @@ Services can be provided in a services.js file, with content corresponding to th
 
 ```js
 module.exports.available = {
-  service1Name: function() {
+  service1Name: async function() {
     // return data
   }
 };

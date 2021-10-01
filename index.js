@@ -36,7 +36,7 @@ const servicefilepath = config.get ( "devweb.servicefilepath" )
 /*
   Services can be provided in a /services.js:
   module.exports.available = {
-    service1Name: function() {
+    service1Name: async function() {
       // return data
     }
   };
