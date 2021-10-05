@@ -135,6 +135,7 @@ function redirectaddress( addr ) {
   for (key in addressredirects) {
     if( 0 == addr.indexOf( key ) ) {
       addr = addr.replace( key, addressredirects[ key ] );
+      console.log( `Redirecting to ${ addr }` )
     }
   }
   return addr
@@ -198,6 +199,7 @@ const server = http.createServer( async function ( req, res ) {
   console.log( "Received request:", req.method, req.url )
 
   let url = redirectaddress( req.url )
+  req.url = url;
   let data = "";
 
   const parts = getURLParts( url )
