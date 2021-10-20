@@ -1,28 +1,29 @@
 const http = require( "http" )
 const https = require( "https" )
-const fs = require( "fs" )
+const fs = require( "fs" ).promises
 const config = require( "config" )
 
 const host = "localhost"
 const port = 8000
 
 /*
-You will require a /config/default.json:
-{
-  "devweb": {
-    "localwebroot": "C:/Users/Bueno/Documents/GitHub/arit-calendar/out",
-    "proxyhost": "www.aroomintown.com",
-    "accesstoken": "b225dfc4466f7cad0c519d6082703b1943b335fa",
-    "addressredirects" : {
-      "/a/": "/calendar/"
-    },
-    "mimemap": {
-      ".js": "application/javascript",
-      ".html": "text/html",
-      ".css": "text/css"
+  You will require a /config/default.json:
+  {
+    "devweb": {
+      "localwebroot": "C:/Users/Bueno/Documents/GitHub/arit-calendar/out",
+      "proxyhost": "www.aroomintown.com",
+      "accesstoken": "b225dfc4466f7cad0c519d6082703b1943b335fa",
+      "addressredirects" : {
+        "/a/": "/calendar/"
+      },
+      "mimemap": {
+        ".js": "application/javascript",
+        ".html": "text/html",
+        ".css": "text/css"
+      },
+      "servicefilepath": "./services.js"
     }
   }
-}
 */
 
 const localwebroot = config.get( "devweb.localwebroot" )
@@ -30,6 +31,27 @@ const weblocation = config.get( "devweb.proxyhost" )
 const accesstoken = config.get( "devweb.accesstoken" )
 const addressredirects = config.get( "devweb.addressredirects" )
 const mimemap = config.get( "devweb.mimemap" )
+const servicefilepath = config.get ( "devweb.servicefilepath" )
+
+/*
+  Services can be provided in a /services.js:
+  module.exports.available = {
+    service1Name: async function() {
+      // return data
+    }
+  };
+*/
+
+let services = { available: {} };
+
+fs.access( servicefilepath )
+  .then( res => {
+    console.log( `Including services in file ${servicefilepath}` )
+    services = require( servicefilepath )
+  } )
+  .catch( err => {
+    console.log( "No services.js found" )
+  } )
 
 function proxgetrequest( req, res ) {
   //GET verb only
@@ -113,56 +135,99 @@ function redirectaddress( addr ) {
   for (key in addressredirects) {
     if( 0 == addr.indexOf( key ) ) {
       addr = addr.replace( key, addressredirects[ key ] );
+      console.log( `Redirecting to ${ addr }` )
     }
   }
   return addr
 }
 
-const server = http.createServer( function ( req, res ) {
+const getURLParts = function( url ) {
 
-  let actualfile = redirectaddress( req.url )
-  if( "/" == actualfile.slice( -1 ) ) actualfile += "index.html"
+  const hasQueryStr = url.includes( "?" )
 
-  fs.readFile( localwebroot + actualfile, "utf8", function ( err, data ) {
+  const parts = {
+    route: hasQueryStr ? url.slice( 0, url.indexOf( "?" ) ) : url,
+    query: hasQueryStr ? url.slice( url.indexOf( "?" ) ) : "",
+    pairs: {}
+  }
 
-    if ( err ) {
-      console.log( `Received a request for ${req.url} but need to request from our server` )
+  if( hasQueryStr ) {
+    const keyValPairs = parts.query.slice( 1 ).split( "&" )
+    keyValPairs.forEach( pair => {
+      const keyOrVal = pair.split( "=" )
+      parts.pairs[ keyOrVal[ 0 ] ] = keyOrVal[ 1 ]
+    } )
+  }
 
-      if( "GET" == req.method ) {
-        proxgetrequest( req, res )
-        return
-      } else {
-        let data = '';
-        req.on('data', chunk => {
-          data += chunk;
-        })
-        req.on('end', () => {
-          proxrequest( req, res, data )
-        })
-        return
-      }
+  return parts
+}
+
+const handleService = async function( req, res, service, parts ) {
+  console.log( `Calling service ${ service }` )
+  return await services.available[ service ]( servicefilepath, parts, req.body )
+}
+
+const handleFileOrProxy = async function( req, res, filename ) {
+
+  try {
+
+    data = await fs.readFile( localwebroot + filename, "utf8" )
+    console.log( `Serving local copy of ${ filename.slice( 1 ) }` )
+
+  } catch {
+
+    console.log( `Passing request to server` )
+    if( "GET" == req.method ) {
+      proxgetrequest( req, res )
+    } else {
+      let data = '';
+      req.on('data', chunk => {
+        data += chunk;
+      } )
+      req.on('end', () => {
+        proxrequest( req, res, data )
+      } )
     }
+    return "proxied"
+  }
 
-    console.log( `Received a request for ${req.url} and we have a local copy we can use` )
+  return data
+}
 
-    let filext = /(?:\.([^.]+))?$/.exec( req.url )
-    let mimetype = mimemap[ filext[ 0 ] ]
-    if( undefined === mimetype ) mimetype = "text/html"
+const server = http.createServer( async function ( req, res ) {
 
-    res.setHeader( "Content-Type", mimetype )
-    res.setHeader( "Cache-Control", "public, max-age=0" );
-    res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
+  console.log( "Received request:", req.method, req.url )
 
-    res.writeHead( 200 )
-    res.end( data )
+  let url = redirectaddress( req.url )
+  req.url = url;
+  let data = "";
 
-  } )
+  const parts = getURLParts( url )
 
-  console.log(req.url)
-  console.log(req.method)
+  // check whether service and call
+  if( parts.route.slice( 1 ) in services.available ) {
+    data = await handleService( req, res, parts.route.slice( 1 ), parts )
+  // get file or make proxy request
+  } else {
+    let filename = ( "/" == url ) ? url += "index.html" : parts.route
+    data = await handleFileOrProxy( req, res, filename )
+  }
+
+  if( "proxied" == data ) return
+
+  let filext = /(?:\.([^.]+))?$/.exec( req.url )
+  let mimetype = mimemap[ filext[ 0 ] ]
+  if( undefined === mimetype ) mimetype = "text/html"
+
+  res.setHeader( "Content-Type", mimetype )
+  res.setHeader( "Cache-Control", "public, max-age=0" );
+  res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
+
+  res.writeHead( 200 )
+  res.end( data )
 
 } )
 
 server.listen( port, host, () => {
-  console.log( `Server is running on http://${host}:${port}` )
+  console.log( `Serving from directory ${localwebroot} at http://${host}:${port}` )
 } )
