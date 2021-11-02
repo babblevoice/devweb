@@ -1,5 +1,6 @@
 const http = require( "http" )
 const https = require( "https" )
+const path = require( "path" )
 const fs = require( "fs" ).promises
 const config = require( "config" )
 
@@ -52,6 +53,22 @@ fs.access( servicefilepath )
   .catch( err => {
     console.log( "No services.js found" )
   } )
+
+/*
+  Arguments can be passed after the filename:
+  > node index.js --flag
+*/
+
+const ownName = path.basename( __filename )
+const ownArgs = process.argv.slice( process.argv.indexOf( ownName ) )
+
+const ownFlags = []
+
+ownArgs.forEach( ownArg => {
+  ownFlags.forEach( ownFlag => {
+    if( ownArg === "-" + ownFlag.short || ownArg === "--" + ownFlag.long ) ownFlag.action()
+  } )
+} )
 
 function proxgetrequest( req, res ) {
   //GET verb only
