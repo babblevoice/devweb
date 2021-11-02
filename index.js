@@ -49,6 +49,7 @@ fs.access( servicefilepath )
   .then( res => {
     console.log( `Including services in file ${servicefilepath}` )
     services = require( servicefilepath )
+    handleArgs()
   } )
   .catch( err => {
     console.log( "No services.js found" )
@@ -56,19 +57,28 @@ fs.access( servicefilepath )
 
 /*
   Arguments can be passed after the filename:
-  > node index.js --flag
+  > node index.js --flag /service?key=value
 */
 
-const ownName = path.basename( __filename )
-const ownArgs = process.argv.slice( process.argv.indexOf( ownName ) )
+function handleArgs() {
 
-const ownFlags = []
+  const ownName = path.basename( __filename )
+  const ownArgs = process.argv.slice( process.argv.indexOf( ownName ) )
 
-ownArgs.forEach( ownArg => {
-  ownFlags.forEach( ownFlag => {
-    if( ownArg === "-" + ownFlag.short || ownArg === "--" + ownFlag.long ) ownFlag.action()
+  const ownFlags = []
+
+  ownArgs.forEach( async ownArg => {
+    // check whether flag and apply
+    ownFlags.forEach( ownFlag => {
+      if( ownArg === "-" + ownFlag.short || ownArg === "--" + ownFlag.long ) ownFlag.action()
+    } )
+    // check whether service and call
+    const parts = getURLParts( ownArg )
+    if( parts.route[ 0 ] === "/" && parts.route.slice( 1 ) in services.available ) {
+      await handleService( parts.route.slice( 1 ), parts )
+    }
   } )
-} )
+}
 
 function proxgetrequest( req, res ) {
   //GET verb only
@@ -158,7 +168,7 @@ function redirectaddress( addr ) {
   return addr
 }
 
-const getURLParts = function( url ) {
+function getURLParts( url ) {
 
   const hasQueryStr = url.includes( "?" )
 
@@ -179,7 +189,7 @@ const getURLParts = function( url ) {
   return parts
 }
 
-const handleService = async function( req, res, service, parts ) {
+async function handleService( service, parts, req = {}, res = {} ) {
   console.log( `Calling service ${ service }` )
   return await services.available[ service ]( servicefilepath, parts, req.body )
 }
@@ -223,7 +233,7 @@ const server = http.createServer( async function ( req, res ) {
 
   // check whether service and call
   if( parts.route.slice( 1 ) in services.available ) {
-    data = await handleService( req, res, parts.route.slice( 1 ), parts )
+    data = await handleService( parts.route.slice( 1 ), parts, req, res )
   // get file or make proxy request
   } else {
     let filename = ( "/" == url ) ? url += "index.html" : parts.route
