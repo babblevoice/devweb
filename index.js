@@ -48,7 +48,7 @@ let services = { available: {} };
 fs.access( servicefilepath )
   .then( res => {
     console.log( `Including services in file ${servicefilepath}` )
-    services = require( servicefilepath )
+    services = { available: { ...services.available, ...require( servicefilepath ).available } }
     handleArgs()
   } )
   .catch( err => {
