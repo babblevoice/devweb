@@ -8,7 +8,7 @@ const host = "localhost"
 const port = 8000
 
 /*
-  You will require a /config/default.json:
+  You will require a config file (default path: ./config/default.json):
   {
     "devweb": {
       "localwebroot": "C:/Users/Bueno/Documents/GitHub/arit-calendar/out",
@@ -35,7 +35,7 @@ const mimemap = config.get( "devweb.mimemap" )
 const servicefilepath = config.get ( "devweb.servicefilepath" )
 
 /*
-  Services can be provided in a /services.js:
+  Services can be made available from the service file path in config:
   module.exports.available = {
     service1Name: async function() {
       // return data
@@ -48,28 +48,49 @@ let services = { available: {} };
 fs.access( servicefilepath )
   .then( res => {
     console.log( `Including services in file ${servicefilepath}` )
-    services = { available: { ...services.available, ...require( servicefilepath ).available } }
-    handleArgs()
   } )
   .catch( err => {
-    console.log( "No services.js found" )
+    console.log( "No services file found" )
+  } )
+  .then( () => {
+    services = { available: { ...services.available, ...require( servicefilepath ).available } }
+    const availableStr = Object.keys( services.available ).map( key => " /" + key ).join( "\n" )
+    console.log( availableStr ? "Available:\n" + availableStr : "No services made available" )
+  } )
+  .catch( err => {
+    console.log( `Services file unsuitable - ${err}` )
+  } )
+  .then( () => {
+    handleArgs()
   } )
 
 /*
-  Arguments can be passed after the filename:
+  Arguments to the server can be passed after the filename at startup:
   > node index.js --flag /service?key=value
+
+  An option flag is defined in an object included in the flags array:
+  const flags = [
+    {
+      long: "flag",
+      short: "f",
+      intent: "triggers an action",
+      action: function() {
+        // do something
+      }
+    }
+  ]
 */
 
 function handleArgs() {
 
-  const ownName = path.basename( __filename )
-  const ownArgs = process.argv.slice( process.argv.indexOf( ownName ) )
+  const filename = path.basename( __filename )
+  const args = process.argv.slice( process.argv.indexOf( filename ) )
 
-  const ownFlags = []
+  const flags = []
 
-  ownArgs.forEach( async ownArg => {
+  args.forEach( async ownArg => {
     // check whether flag and apply
-    ownFlags.forEach( ownFlag => {
+    flags.forEach( ownFlag => {
       if( ownArg === "-" + ownFlag.short || ownArg === "--" + ownFlag.long ) ownFlag.action()
     } )
     // check whether service and call
