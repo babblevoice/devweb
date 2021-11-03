@@ -86,7 +86,18 @@ function handleArgs() {
   const filename = path.basename( __filename )
   const args = process.argv.slice( process.argv.indexOf( filename ) )
 
-  const flags = []
+  const flags = [
+    {
+      long: "help",
+      short: "h",
+      intent: "show help text",
+      action: () => {
+        const optionsStr = flags.map( f => [ f.long && " --" + f.long, f.short && " -" + f.short, f.intent && f.intent ].join( "\t" ) ).join( "\n" )
+        console.log( "Options:\n" + optionsStr )
+        process.exit()
+      }
+    }
+  ]
 
   args.forEach( async ownArg => {
     // check whether flag and apply
