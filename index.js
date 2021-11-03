@@ -223,7 +223,7 @@ function getURLParts( url ) {
 
 async function handleService( service, parts, req = {}, res = {} ) {
   console.log( `Calling service ${ service }` )
-  return await services.available[ service ]( servicefilepath, parts, req.body )
+  return await services.available[ service ]( config, parts, req.body )
 }
 
 const handleFileOrProxy = async function( req, res, filename ) {
