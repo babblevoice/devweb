@@ -2,6 +2,7 @@ const http = require( "http" )
 const https = require( "https" )
 const path = require( "path" )
 const fs = require( "fs" ).promises
+
 const config = require( "config" )
 
 const host = "localhost"
@@ -112,8 +113,9 @@ function handleArgs() {
   } )
 }
 
+// handles GET method only
 function proxgetrequest( req, res ) {
-  //GET verb only
+
   const options = {
     host: weblocation,
     path: req.url,
@@ -122,9 +124,12 @@ function proxgetrequest( req, res ) {
       'Authorization': `Bearer ${accesstoken}`
     }
   }
-  var httpsreq = https.request(options, (resp) => {
+
+  const httpsreq = https.request(options, (resp) => {
+
     console.log('statusCode:', resp.statusCode)
     console.log('headers:', resp.headers)
+
     if( 404 === resp.statusCode ) {
       res.writeHead( 404 )
       res.end( "Not found on remote" )
@@ -143,15 +148,18 @@ function proxgetrequest( req, res ) {
       res.end( () => {} )
     } )
   } )
+
   httpsreq.on( "error", ( err ) => {
     res.writeHead( 500 )
     res.end( "Sorry" )
   } )
+
   httpsreq.end()
 }
 
+// handles POST, PUT and DELETE methods
 function proxrequest( req, res, data ) {
-  //handles POST, PUT and DELETE
+
   options = {
     host: weblocation,
     path: req.url,
@@ -162,14 +170,18 @@ function proxrequest( req, res, data ) {
       'Content-Length': req.headers["content-length"]
     }
   }
-  var httpsreq = https.request(options, (resp) => {
+
+  const httpsreq = https.request(options, (resp) => {
+
     console.log('statusCode:', resp.statusCode)
     console.log('headers:', resp.headers)
+
     if( 404 === resp.statusCode ) {
       res.writeHead( 404 )
       res.end( "Not found on remote" )
       return
     }
+
     res.setHeader( "Content-Type", resp.headers[ "content-type" ] )
     res.setHeader( "Cache-Control", "public, max-age=0" );
     res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
@@ -182,10 +194,12 @@ function proxrequest( req, res, data ) {
       res.end( () => {} )
     } )
   } )
+
   httpsreq.on( "error", ( err ) => {
     res.writeHead( 500 )
     res.end( "Sorry" )
   } )
+
   httpsreq.write(data)
   httpsreq.end()
 }
@@ -236,9 +250,11 @@ const handleFileOrProxy = async function( req, res, filename ) {
   } catch {
 
     console.log( `Passing request to server` )
+
     if( "GET" == req.method ) {
       proxgetrequest( req, res )
-    } else {
+    }
+    else {
       let data = '';
       req.on('data', chunk => {
         data += chunk;
@@ -267,16 +283,16 @@ const server = http.createServer( async function ( req, res ) {
   if( parts.route.slice( 1 ) in services.available ) {
     data = await handleService( parts.route.slice( 1 ), parts, req, res )
   // get file or make proxy request
-  } else {
-    let filename = ( "/" == url ) ? url += "index.html" : parts.route
+  }
+  else {
+    const filename = ( "/" == url ) ? url += "index.html" : parts.route
     data = await handleFileOrProxy( req, res, filename )
   }
 
   if( "proxied" == data ) return
 
-  let filext = /(?:\.([^.]+))?$/.exec( req.url )
-  let mimetype = mimemap[ filext[ 0 ] ]
-  if( undefined === mimetype ) mimetype = "text/html"
+  const filext = /(?:\.([^.]+))?$/.exec( req.url )
+  const mimetype = mimemap[ filext[ 0 ] ] || "text/html"
 
   res.setHeader( "Content-Type", mimetype )
   res.setHeader( "Cache-Control", "public, max-age=0" );
