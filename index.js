@@ -113,62 +113,20 @@ function handleArgs() {
   } )
 }
 
-// handles GET method only
-function proxgetrequest( req, res ) {
-
-  const options = {
-    host: weblocation,
-    path: req.url,
-    method: "GET",
-    headers: {
-      'Authorization': `Bearer ${accesstoken}`
-    }
-  }
-
-  const httpsreq = https.request(options, (resp) => {
-
-    console.log('statusCode:', resp.statusCode)
-    console.log('headers:', resp.headers)
-
-    if( 404 === resp.statusCode ) {
-      res.writeHead( 404 )
-      res.end( "Not found on remote" )
-      return
-    }
-
-    res.setHeader( "Content-Type", resp.headers[ "content-type" ] )
-    res.setHeader( "Cache-Control", "public, max-age=0" );
-    res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
-
-    resp.on( "data", ( chunk ) => {
-      res.write( chunk )
-    } )
-    // The whole response has been received. Print out the result.
-    resp.on( "end", () => {
-      res.end( () => {} )
-    } )
-  } )
-
-  httpsreq.on( "error", ( err ) => {
-    res.writeHead( 500 )
-    res.end( "Sorry" )
-  } )
-
-  httpsreq.end()
-}
-
-// handles POST, PUT and DELETE methods
 function proxrequest( req, res, data ) {
 
-  options = {
+  const options = {
     host: weblocation,
     path: req.url,
     method: req.method,
     headers: {
       'Authorization': `Bearer ${accesstoken}`,
-      'Content-Type': req.headers["content-type"],
-      'Content-Length': req.headers["content-length"]
     }
+  }
+
+  if( "GET" != req.method ) {
+    options.headers[ "Content-Type" ] = req.headers[ "content-type" ]
+    options.headers[ "Content-Length" ] = req.headers[ "content-length" ]
   }
 
   const httpsreq = https.request(options, (resp) => {
@@ -200,7 +158,7 @@ function proxrequest( req, res, data ) {
     res.end( "Sorry" )
   } )
 
-  httpsreq.write(data)
+  if( "GET" != req.method ) httpsreq.write( data )
   httpsreq.end()
 }
 
@@ -252,7 +210,7 @@ const handleFileOrProxy = async function( req, res, filename ) {
     console.log( `Passing request to server` )
 
     if( "GET" == req.method ) {
-      proxgetrequest( req, res )
+      proxrequest( req, res )
     }
     else {
       let data = '';
