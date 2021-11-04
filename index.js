@@ -131,8 +131,9 @@ function proxrequest( req, res, data ) {
 
   const httpsreq = https.request(options, (resp) => {
 
-    console.log('statusCode:', resp.statusCode)
-    console.log('headers:', resp.headers)
+    console.log( "Received response for request", req.method, req.url )
+    console.log( "- statusCode:", resp.statusCode)
+    console.log( "- headers:", resp.headers)
 
     if( 404 === resp.statusCode ) {
       res.writeHead( 404 )
@@ -155,7 +156,7 @@ function proxrequest( req, res, data ) {
 
   httpsreq.on( "error", ( err ) => {
     res.writeHead( 500 )
-    res.end( "Sorry" )
+    res.end( "Server error - sorry" )
   } )
 
   if( "GET" != req.method ) httpsreq.write( data )
