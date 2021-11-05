@@ -57,6 +57,34 @@ nodemon index.js
 
 The server runs at `localhost:8000`.
 
+## Startup arguments
+
+One or more arguments can be passed to the server at startup. These are listed after the name of the file. Each argument is assumed to be:
+
+- an option flag, whether long form or short
+- a service name (see [Service provision](#service-provision) below) in URL format
+
+```shell
+node index.js --flag -f /service?key=value
+```
+
+## Option definition
+
+Each option is defined in an object included in the `flags` array. The object should include a function to be invoked if the flag is passed (`action`) and the flag itself in one or both of a long form (`long`) or short form (`short`), and may include a summary of the action performed (`intent`).
+
+```js
+const flags = [
+  {
+    long: "flag",
+    short: "f",
+    intent: "triggers an action",
+    action: function() {
+      // do something
+    }
+  }
+]
+```
+
 ## Service provision
 
 Services can be provided in a services.js file, with content corresponding to the following structure:

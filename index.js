@@ -77,7 +77,7 @@ fs.access( servicefilepath )
   Arguments to the server can be passed after the filename at startup:
   > node index.js --flag /service?key=value
 
-  An option flag is defined in an object included in the flags array:
+  Each option is defined in an object included in the flags array:
   const flags = [
     {
       long: "flag",
@@ -95,7 +95,7 @@ function handleArgs() {
   const filename = path.basename( __filename )
   const args = process.argv.slice( process.argv.indexOf( filename ) )
 
-  /* list available flags, each w/ action and optional long form, short form and summary of intent  */
+  /* list available flags, each w/ action, one or both of long and short form and optional summary */
   const flags = [
     {
       long: "help",
