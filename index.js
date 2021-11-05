@@ -92,8 +92,7 @@ fs.access( servicefilepath )
 
 function handleArgs() {
 
-  const filename = path.basename( __filename )
-  const args = process.argv.slice( process.argv.indexOf( filename ) )
+  const args = process.argv.slice( process.argv.indexOf( __filename ) + 1 )
 
   /* list available flags, each w/ action, one or both of long and short form and optional summary */
   const flags = [
@@ -109,13 +108,14 @@ function handleArgs() {
     }
   ]
 
-  args.forEach( async ownArg => {
+  args.forEach( async arg => {
+
     /* check whether flag and if so apply */
-    flags.forEach( ownFlag => {
-      if( ownArg === "-" + ownFlag.short || ownArg === "--" + ownFlag.long ) ownFlag.action()
+    flags.forEach( flag => {
+      if( arg === "-" + flag.short || arg === "--" + flag.long ) flag.action()
     } )
     /* check whether service and if so call */
-    const parts = getURLParts( ownArg )
+    const parts = getURLParts( arg )
     if( parts.route[ 0 ] === "/" && parts.route.slice( 1 ) in services.available ) {
       await invokeService( parts.route.slice( 1 ), parts )
     }
