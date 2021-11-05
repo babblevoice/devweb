@@ -99,7 +99,7 @@ function handleArgs() {
     {
       long: "help",
       short: "h",
-      intent: "show help text",
+      intent: "show help text and exit",
       action: () => {
         const optionsStr = flags.map( f => [ f.long && " --" + f.long, f.short && " -" + f.short, f.intent && f.intent ].join( "\t" ) ).join( "\n" )
         console.log( "Options:\n" + optionsStr )
@@ -110,15 +110,24 @@ function handleArgs() {
 
   args.forEach( async arg => {
 
+    let usedArg = false
+
     /* check whether flag and if so apply */
     flags.forEach( flag => {
-      if( arg === "-" + flag.short || arg === "--" + flag.long ) flag.action()
+      if( arg === "-" + flag.short || arg === "--" + flag.long ) {
+        usedArg = true
+        console.log( "Applying option for flag", arg )
+        flag.action()
+      }
     } )
     /* check whether service and if so call */
     const parts = getURLParts( arg )
     if( parts.route[ 0 ] === "/" && parts.route.slice( 1 ) in services.available ) {
+      usedArg = true
       await invokeService( parts.route.slice( 1 ), parts )
     }
+
+    if( !usedArg ) console.log( "No option or service found for argument", arg )
   } )
 }
 
