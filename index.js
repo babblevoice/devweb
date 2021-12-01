@@ -82,7 +82,8 @@ fs.access( servicefilepath )
       long: "flag",
       short: "f",
       intent: "triggers an action",
-      action: function() {
+      params: 1, // default 0
+      action: function( param ) {
         // do something
       }
     }
@@ -93,7 +94,7 @@ function handleArgs() {
 
   const args = process.argv.slice( process.argv.indexOf( __filename ) + 1 )
 
-  /* list available flags, each w/ action, one or both of long and short form and optional summary */
+  /* list available flags, each w/ action, one or both of long and short form, any params and optional summary */
   const flags = [
     {
       long: "help",
@@ -107,7 +108,9 @@ function handleArgs() {
     }
   ]
 
-  args.forEach( async arg => {
+  args.forEach( async ( arg, argInd, argArr ) => {
+
+    if( ![ "-", "--", "/" ].includes( arg[ 0 ] ) ) return
 
     let usedArg = false
 
@@ -116,7 +119,13 @@ function handleArgs() {
       if( arg === "-" + flag.short || arg === "--" + flag.long ) {
         usedArg = true
         console.log( "Applying option for flag", arg )
-        flag.action()
+        const nextInd = argInd + 1
+        const numPars = flag.params || 0
+        const allPars = numPars && args.slice( nextInd, nextInd + numPars )
+        allPars
+          ? flag.action( allPars.length === 1 ? allPars[ 0 ] : allPars )
+          : flag.action()
+        allPars && argArr.splice( argInd, argInd + numPars ) // remove from args array any params passed
       }
     } )
     /* check whether service and if so call */
