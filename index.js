@@ -44,8 +44,8 @@ const servicefilepath = config.get ( "devweb.servicefilepath" )
 /*
   Services can be made available from the service file path in config:
   module.exports.available = {
-    service1Name: async function() {
-      // return data
+    service1Name: async function( config, parts, data ) {
+      // return result
     }
   };
 */
@@ -168,8 +168,23 @@ function redirectaddress( addr ) {
 
 /* return result from service call */
 async function invokeService( service, parts, req = {}, res = {} ) {
+
   console.log( `Calling service ${ service }` )
-  return await services.available[ service ]( config, parts, req.body )
+
+  if( "GET" == req.method ) {
+    return await services.available[ service ]( config, parts )
+  }
+  else {
+    let data = '';
+    req.on('data', chunk => {
+      data += chunk;
+    } )
+    req.on('end', async () => {
+      const result = await services.available[ service ]( config, parts, data )
+      send( res, result )
+    } )
+    return "calling service"
+  }
 }
 
 /* Request handling */
@@ -199,9 +214,7 @@ function proxrequest( req, res, data ) {
     console.log( "- headers:", resp.headers)
 
     if( 404 === resp.statusCode ) {
-      res.writeHead( 404 )
-      res.end( "Not found on remote" )
-      return
+      return send( res, "Not found on remote", 404 )
     }
 
     res.setHeader( "Content-Type", resp.headers[ "content-type" ] )
@@ -218,8 +231,7 @@ function proxrequest( req, res, data ) {
   } )
 
   httpsreq.on( "error", ( err ) => {
-    res.writeHead( 500 )
-    res.end( "Server error - sorry" )
+    send( res, "Server error - sorry", 500 )
   } )
 
   if( "GET" != req.method ) httpsreq.write( data )
@@ -252,10 +264,15 @@ const handleFileOrProxy = async function( req, res, filename ) {
         proxrequest( req, res, data )
       } )
     }
-    return "proxied"
+    return "proxying"
   }
 
   return data
+}
+
+const send = function( res, data, status = 200 ) {
+  res.writeHead( status )
+  res.end( data )
 }
 
 /* Server setup */
@@ -281,7 +298,8 @@ const server = http.createServer( async function ( req, res ) {
     data = await handleFileOrProxy( req, res, filename )
   }
 
-  if( "proxied" == data ) return
+  /* allow for any delay else respond */
+  if( "proxying" == data || "calling service" == data ) return
 
   const filext = /(?:\.([^.]+))?$/.exec( req.url )
   const mimetype = mimemap[ filext[ 0 ] ] || "text/html"
@@ -290,8 +308,7 @@ const server = http.createServer( async function ( req, res ) {
   res.setHeader( "Cache-Control", "public, max-age=0" );
   res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
 
-  res.writeHead( 200 )
-  res.end( data )
+  send( res, data )
 } )
 
 server.listen( port, host, () => {
