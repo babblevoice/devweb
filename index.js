@@ -123,7 +123,7 @@ function handleArgs() {
     const parts = getURLParts( arg )
     if( parts.route[ 0 ] === "/" && parts.route.slice( 1 ) in services.available ) {
       usedArg = true
-      await invokeService( parts.route.slice( 1 ), parts )
+      await handleServiceCall( parts.route.slice( 1 ), parts )
     }
 
     if( !usedArg ) console.log( "No option or service found for argument", arg )
@@ -164,32 +164,53 @@ function redirectaddress( addr ) {
   return addr
 }
 
-/* Service handling */
+/* Request handling */
 
-/* return result from service call */
-async function invokeService( service, parts, req = {}, res = {} ) {
+/* make service call and respond with result or log if any */
+async function handleServiceCall( service, parts, req, res ) {
 
   console.log( `Calling service ${ service }` )
 
-  if( "GET" == req.method ) {
-    return await services.available[ service ]( config, parts )
+  let result
+  /* handle service call via CLI */
+  if( "undefined" === typeof req ) {
+    result = await services.available[ service ]( config, parts )
+    return result ? console.log( result ) : false
+  }
+  /* handle service call via URL */
+  else if( "GET" == req.method ) {
+    result = await services.available[ service ]( config, parts )
   }
   else {
-    let data = '';
-    req.on('data', chunk => {
-      data += chunk;
-    } )
-    req.on('end', async () => {
-      const result = await services.available[ service ]( config, parts, data )
-      send( res, result )
-    } )
-    return "calling service"
+    const chunks = [];
+    for await ( chunk of req ) {
+      chunks.push( chunk );
+    }
+    const data = Buffer.concat( chunks ).toString()
+    result = await services.available[ service ]( config, parts, data )
   }
+  sendResponse( res, result )
 }
 
-/* Request handling */
+/* respond with file */
+function serveFile( req, res, filename, data ) {
 
-function proxrequest( req, res, data ) {
+  console.log( `Serving local copy of ${ filename.slice( 1 ) }` )
+
+  const filext = /(?:\.([^.]+))?$/.exec( req.url )
+  const mimetype = mimemap[ filext[ 0 ] ] || "text/html"
+
+  res.setHeader( "Content-Type", mimetype )
+  res.setHeader( "Cache-Control", "public, max-age=0" );
+  res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
+
+  sendResponse( res, data )
+}
+
+/* respond with proxy response */
+function manageProxyRequest( req, res, data ) {
+
+  console.log( `Passing request to server` )
 
   /* default options object for GET method */
   const options = {
@@ -214,7 +235,7 @@ function proxrequest( req, res, data ) {
     console.log( "- headers:", resp.headers)
 
     if( 404 === resp.statusCode ) {
-      return send( res, "Not found on remote", 404 )
+      return sendResponse( res, "Not found on remote", 404 )
     }
 
     res.setHeader( "Content-Type", resp.headers[ "content-type" ] )
@@ -231,46 +252,38 @@ function proxrequest( req, res, data ) {
   } )
 
   httpsreq.on( "error", ( err ) => {
-    send( res, "Server error - sorry", 500 )
+    sendResponse( res, "Server error - sorry", 500 )
   } )
 
   if( "GET" != req.method ) httpsreq.write( data )
   httpsreq.end()
 }
 
-const handleFileOrProxy = async function( req, res, filename ) {
-
-  let data
+const handleFileOrProxyRequest = async function( req, res, filename ) {
 
   /* check whether file and if not assume URL and make request */
   try {
 
-    data = await fs.readFile( localwebroot + filename, "utf8" )
-    console.log( `Serving local copy of ${ filename.slice( 1 ) }` )
+    const data = await fs.readFile( localwebroot + filename, "utf8" )
+    serveFile( req, res, filename, data )
 
   } catch {
 
-    console.log( `Passing request to server` )
-
     if( "GET" == req.method ) {
-      proxrequest( req, res )
+      manageProxyRequest( req, res )
     }
     else {
-      let data = '';
-      req.on('data', chunk => {
-        data += chunk;
-      } )
-      req.on('end', () => {
-        proxrequest( req, res, data )
-      } )
+      const chunks = [];
+      for await ( chunk of req ) {
+        chunks.push( chunk )
+      }
+      const data = Buffer.concat( chunks ).toString()
+      manageProxyRequest( req, res, data )
     }
-    return "proxying"
   }
-
-  return data
 }
 
-const send = function( res, data, status = 200 ) {
+const sendResponse = function( res, data, status = 200 ) {
   res.writeHead( status )
   res.end( data )
 }
@@ -284,31 +297,18 @@ const server = http.createServer( async function ( req, res ) {
   /* handle any path part replacement */
   let url = redirectaddress( req.url )
   req.url = url;
-  let data = "";
 
   const parts = getURLParts( url )
 
   /* check whether service and if so call */
   if( parts.route.slice( 1 ) in services.available ) {
-    data = await invokeService( parts.route.slice( 1 ), parts, req, res )
+    await handleServiceCall( parts.route.slice( 1 ), parts, req, res )
   }
-  /* get file or make proxy request */
+  /* serve file or manage proxy request */
   else {
     const filename = ( "/" == url ) ? url += "index.html" : parts.route
-    data = await handleFileOrProxy( req, res, filename )
+    await handleFileOrProxyRequest( req, res, filename )
   }
-
-  /* allow for any delay else respond */
-  if( "proxying" == data || "calling service" == data ) return
-
-  const filext = /(?:\.([^.]+))?$/.exec( req.url )
-  const mimetype = mimemap[ filext[ 0 ] ] || "text/html"
-
-  res.setHeader( "Content-Type", mimetype )
-  res.setHeader( "Cache-Control", "public, max-age=0" );
-  res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
-
-  send( res, data )
 } )
 
 server.listen( port, host, () => {
