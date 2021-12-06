@@ -3,6 +3,7 @@
 const http = require( "http" )
 const https = require( "https" )
 const fs = require( "fs" ).promises
+const { Buffer } = require( "buffer" )
 
 const config = require( "config" )
 
@@ -166,6 +167,16 @@ function redirectaddress( addr ) {
 
 /* Request handling */
 
+/* return data extracted from request */
+async function extractData( req ) {
+  const chunks = [];
+  for await ( chunk of req ) {
+    chunks.push( chunk );
+  }
+  const data = Buffer.concat( chunks ).toString()
+  return data
+}
+
 /* make service call and respond with result or log if any */
 async function handleServiceCall( service, parts, req, res ) {
 
@@ -182,11 +193,7 @@ async function handleServiceCall( service, parts, req, res ) {
     result = await services.available[ service ]( config, parts )
   }
   else {
-    const chunks = [];
-    for await ( chunk of req ) {
-      chunks.push( chunk );
-    }
-    const data = Buffer.concat( chunks ).toString()
+    const data = await extractData( req )
     result = await services.available[ service ]( config, parts, data )
   }
   sendResponse( res, result )
@@ -273,11 +280,7 @@ const handleFileOrProxyRequest = async function( req, res, filename ) {
       manageProxyRequest( req, res )
     }
     else {
-      const chunks = [];
-      for await ( chunk of req ) {
-        chunks.push( chunk )
-      }
-      const data = Buffer.concat( chunks ).toString()
+      const data = await extractData( req )
       manageProxyRequest( req, res, data )
     }
   }
