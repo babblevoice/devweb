@@ -6,6 +6,7 @@ const fs = require( "fs" ).promises
 
 const config = require( "config" )
 
+
 /* Initialization */
 
 const defaultHost = "localhost"
@@ -37,7 +38,8 @@ const { servicefilepath } = c
 
 let host, port, localwebroot, proxyhost, accesstoken, addressredirects, mimemap
 
-/* Modification */
+
+/* Customization */
 
 /*
   Services can be made available from the service file path in config:
@@ -49,6 +51,83 @@ let host, port, localwebroot, proxyhost, accesstoken, addressredirects, mimemap
 */
 
 let services = { available: {} };
+
+/*
+  Arguments to the server can be passed after the filename at startup:
+
+  > node index.js --flag /service?key=value
+
+  Each option is defined in an object included in the flags array,
+  w/ an action, one or both of a long and short form, any params and
+  an optional summary:
+
+  const flags = [
+    {
+      long: "flag",
+      short: "f",
+      intent: "triggers an action",
+      params: 1, // default 0
+      action: function( param ) {
+        // do something
+      }
+    }
+  ]
+*/
+
+const flags = [
+  {
+    long: "help",
+    short: "h",
+    intent: "show help text and exit",
+    action: showHelpText
+  },
+  {
+    long: "set",
+    short: "s",
+    intent: "set a config item, arrays comma-separated (e.g. -s arr \"1,2\") & nested key-value pairs colon-separated (e.g. -s obj \"k:v\")",
+    params: 2,
+    action: setConfigItem
+  }
+]
+
+/* Option actions */
+
+function showHelpText() {
+  const optionsStr = flags.map( f => [ f.long && " --" + f.long, f.short && " -" + f.short, f.intent && f.intent ].join( "\t" ) ).join( "\n" )
+  console.log( "Options:\n" + optionsStr )
+  process.exit()
+}
+
+function setConfigItem( [ key, value ] ) {
+  /* handle config item of primitive type */
+  if( [ "string", "number", "boolean" ].includes( typeof c[ key ] ) ) {
+    console.log( `Setting ${ key } to ${ value }` )
+    if( "number" === typeof c[ key ] ) value = parseInt( value )
+    if( "boolean" === typeof c[ key ] ) value = value.toLowerCase() === "true" ? true : false
+    c[ key ] = value
+  }
+  /* handle config item where array */
+  else if( Array.isArray( c[ key ] ) ) {
+    console.log( `Setting ${ key } to hold ${ value.split( "," ).join( ", " ) }` )
+    const valueArr = value ? value.split( "," ) : []
+    c[ key ] = valueArr
+  }
+  /* handle config item of type object */
+  else if( "object" === typeof c[ key ] ) {
+    const valuePair = value ? value.split( ":" ) : []
+    if( 2 !== valuePair.length ) return console.log( "Command-line argument to set ${ key } unclear - not set" )
+    console.log( `Setting ${ key } to hold key ${ valuePair[ 0 ] } with value ${ valuePair[ 1 ] }` )
+    c[ key ] = { ...c[ key ], ...Object.fromEntries( [ valuePair ] ) }
+  }
+  /* handle non-config item */
+  if( !Object.keys( c ).includes( key ) ) {
+    console.log( `Setting ${ key } to ${ value }` )
+    c[ key ] = value
+  }
+}
+
+
+/* Startup process */
 
 /*
    check for services, require if present, parse any command-line arguments,
@@ -75,74 +154,12 @@ fs.access( servicefilepath )
     initServer()
   } )
 
-/*
-  Arguments to the server can be passed after the filename at startup:
-  > node index.js --flag /service?key=value
 
-  Each option is defined in an object included in the flags array:
-  const flags = [
-    {
-      long: "flag",
-      short: "f",
-      intent: "triggers an action",
-      params: 1, // default 0
-      action: function( param ) {
-        // do something
-      }
-    }
-  ]
-*/
+/* Startup functions */
 
 function handleArgs() {
 
   const args = process.argv.slice( process.argv.indexOf( __filename ) + 1 )
-
-  /* list available flags, each w/ action, one or both of long and short form, any params and optional summary */
-  const flags = [
-    {
-      long: "help",
-      short: "h",
-      intent: "show help text and exit",
-      action: () => {
-        const optionsStr = flags.map( f => [ f.long && " --" + f.long, f.short && " -" + f.short, f.intent && f.intent ].join( "\t" ) ).join( "\n" )
-        console.log( "Options:\n" + optionsStr )
-        process.exit()
-      }
-    },
-    {
-      long: "set",
-      short: "s",
-      intent: "set a config item, arrays comma-separated (e.g. -s arr \"1,2\") & nested key-value pairs colon-separated (e.g. -s obj \"k:v\")",
-      params: 2,
-      action: ( [ key, value ] ) => {
-        /* handle config item of primitive type */
-        if( [ "string", "number", "boolean" ].includes( typeof c[ key ] ) ) {
-          console.log( `Setting ${ key } to ${ value }` )
-          if( "number" === typeof c[ key ] ) value = parseInt( value )
-          if( "boolean" === typeof c[ key ] ) value = value.toLowerCase() === "true" ? true : false
-          c[ key ] = value
-        }
-        /* handle config item where array */
-        else if( Array.isArray( c[ key ] ) ) {
-          console.log( `Setting ${ key } to hold ${ value.split( "," ).join( ", " ) }` )
-          const valueArr = value ? value.split( "," ) : []
-          c[ key ] = valueArr
-        }
-        /* handle config item of type object */
-        else if( "object" === typeof c[ key ] ) {
-          const valuePair = value ? value.split( ":" ) : []
-          if( 2 !== valuePair.length ) return console.log( "Command-line argument to set ${ key } unclear - not set" )
-          console.log( `Setting ${ key } to hold key ${ valuePair[ 0 ] } with value ${ valuePair[ 1 ] }` )
-          c[ key ] = { ...c[ key ], ...Object.fromEntries( [ valuePair ] ) }
-        }
-        /* handle non-config item */
-        if( !Object.keys( c ).includes( key ) ) {
-          console.log( `Setting ${ key } to ${ value }` )
-          c[ key ] = value
-        }
-      }
-    }
-  ]
 
   args.forEach( async ( arg, argInd, argArr ) => {
 
@@ -180,6 +197,48 @@ function pullConfig() {
   ( { host = defaultHost, port = defaultPort, localwebroot, proxyhost: weblocation, accesstoken, addressredirects, mimemap } = c )
 }
 
+function initServer() {
+
+  const server = http.createServer( async function ( req, res ) {
+
+    console.log( "Received request:", req.method, req.url )
+
+    /* handle any path part replacement */
+    let url = redirectaddress( req.url )
+    req.url = url;
+    let data = "";
+
+    const parts = getURLParts( url )
+
+    /* check whether service and if so call */
+    if( parts.route.slice( 1 ) in services.available ) {
+      data = await invokeService( parts.route.slice( 1 ), parts, req, res )
+    }
+    /* get file or make proxy request */
+    else {
+      const filename = ( "/" == url ) ? url += "index.html" : parts.route
+      data = await handleFileOrProxy( req, res, filename )
+    }
+
+    if( "proxied" == data ) return
+
+    const filext = /(?:\.([^.]+))?$/.exec( req.url )
+    const mimetype = mimemap[ filext[ 0 ] ] || "text/html"
+
+    res.setHeader( "Content-Type", mimetype )
+    res.setHeader( "Cache-Control", "public, max-age=0" );
+    res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
+
+    res.writeHead( 200 )
+    res.end( data )
+  } )
+
+  server.listen( port, host, () => {
+    console.log( `Serving from directory ${ localwebroot } at http://${ host }:${ port }` )
+  } )
+}
+
+
 /* Utility functions */
 
 /* return object containing URL parts */
@@ -214,7 +273,8 @@ function redirectaddress( addr ) {
   return addr
 }
 
-/* Service handling */
+
+/* Request handling */
 
 /* return result from service call */
 async function invokeService( service, parts, req = {}, res = {} ) {
@@ -222,8 +282,7 @@ async function invokeService( service, parts, req = {}, res = {} ) {
   return await services.available[ service ]( config, parts, req.body )
 }
 
-/* Request handling */
-
+/* respond having proxied request */
 function proxrequest( req, res, data ) {
 
   /* default options object for GET method */
@@ -276,6 +335,7 @@ function proxrequest( req, res, data ) {
   httpsreq.end()
 }
 
+/* return local file or initiate proxy request */
 async function handleFileOrProxy( req, res, filename ) {
 
   let data
@@ -306,45 +366,4 @@ async function handleFileOrProxy( req, res, filename ) {
   }
 
   return data
-}
-
-function initServer() {
-
-  const server = http.createServer( async function ( req, res ) {
-
-    console.log( "Received request:", req.method, req.url )
-
-    /* handle any path part replacement */
-    let url = redirectaddress( req.url )
-    req.url = url;
-    let data = "";
-
-    const parts = getURLParts( url )
-
-    /* check whether service and if so call */
-    if( parts.route.slice( 1 ) in services.available ) {
-      data = await invokeService( parts.route.slice( 1 ), parts, req, res )
-    }
-    /* get file or make proxy request */
-    else {
-      const filename = ( "/" == url ) ? url += "index.html" : parts.route
-      data = await handleFileOrProxy( req, res, filename )
-    }
-
-    if( "proxied" == data ) return
-
-    const filext = /(?:\.([^.]+))?$/.exec( req.url )
-    const mimetype = mimemap[ filext[ 0 ] ] || "text/html"
-
-    res.setHeader( "Content-Type", mimetype )
-    res.setHeader( "Cache-Control", "public, max-age=0" );
-    res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
-
-    res.writeHead( 200 )
-    res.end( data )
-  } )
-
-  server.listen( port, host, () => {
-    console.log( `Serving from directory ${ localwebroot } at http://${ host }:${ port }` )
-  } )
 }
