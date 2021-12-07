@@ -8,8 +8,8 @@ const config = require( "config" )
 
 /* Initialization */
 
-const host = "localhost"
-const port = 8000
+const defaultHost = "localhost"
+const defaultPort = 8000
 
 /*
   You will require a config file (default path: ./config/default.json):
@@ -35,7 +35,7 @@ const port = 8000
 const c = { ...config.devweb }
 const { servicefilepath } = c
 
-let localwebroot, proxyhost, accesstoken, addressredirects, mimemap
+let host, port, localwebroot, proxyhost, accesstoken, addressredirects, mimemap
 
 /* Modification */
 
@@ -50,7 +50,10 @@ let localwebroot, proxyhost, accesstoken, addressredirects, mimemap
 
 let services = { available: {} };
 
-/* check for services, require if present, parse any command-line arguments and start server */
+/*
+   check for services, require if present, parse any command-line arguments,
+   assign core devweb config items and start server
+*/
 fs.access( servicefilepath )
   .then( res => {
     console.log( `Including services in file ${servicefilepath}` )
@@ -111,10 +114,7 @@ function handleArgs() {
       short: "s",
       intent: "set a config item, arrays comma-separated (e.g. -s arr \"1,2\") & nested key-value pairs colon-separated (e.g. -s obj \"k:v\")",
       params: 2,
-      action: allPars => {
-        let [ key, value ] = allPars
-        const cKeys = Object.keys( c )
-        if( !cKeys.includes( key ) ) return console.log( `No devweb config key found for argument ${ key }` )
+      action: ( [ key, value ] ) => {
         /* handle config item of primitive type */
         if( [ "string", "number", "boolean" ].includes( typeof c[ key ] ) ) {
           console.log( `Setting ${ key } to ${ value }` )
@@ -134,6 +134,11 @@ function handleArgs() {
           if( 2 !== valuePair.length ) return console.log( "Command-line argument to set ${ key } unclear - not set" )
           console.log( `Setting ${ key } to hold key ${ valuePair[ 0 ] } with value ${ valuePair[ 1 ] }` )
           c[ key ] = { ...c[ key ], ...Object.fromEntries( [ valuePair ] ) }
+        }
+        /* handle non-config item */
+        if( !Object.keys( c ).includes( key ) ) {
+          console.log( `Setting ${ key } to ${ value }` )
+          c[ key ] = value
         }
       }
     }
@@ -172,7 +177,7 @@ function handleArgs() {
 }
 
 function pullConfig() {
-  ( { localwebroot, proxyhost: weblocation, accesstoken, addressredirects, mimemap } = c )
+  ( { host = defaultHost, port = defaultPort, localwebroot, proxyhost: weblocation, accesstoken, addressredirects, mimemap } = c )
 }
 
 /* Utility functions */
@@ -271,7 +276,7 @@ function proxrequest( req, res, data ) {
   httpsreq.end()
 }
 
-const handleFileOrProxy = async function( req, res, filename ) {
+async function handleFileOrProxy( req, res, filename ) {
 
   let data
 
