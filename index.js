@@ -37,6 +37,7 @@ const localwebroot = config.get( "devweb.localwebroot" )
 const weblocation = config.get( "devweb.proxyhost" )
 const accesstoken = config.get( "devweb.accesstoken" )
 const addressredirects = config.get( "devweb.addressredirects" )
+const extractioncriteria = config.has( "devweb.extractioncriteria" ) ? config.get( "devweb.extractioncriteria" ) : [ "method" ]
 const mimemap = config.get( "devweb.mimemap" )
 const servicefilepath = config.get ( "devweb.servicefilepath" )
 
@@ -167,6 +168,19 @@ function redirectaddress( addr ) {
 
 /* Request handling */
 
+/* return true if data extraction criteria met */
+function shouldExtract( req ) {
+  const headers = Object.keys( req.headers ).map( key => key.toLowerCase() )
+  const results = extractioncriteria.map( extractioncriterion =>
+    ( "method" === extractioncriterion && "GET" !== req.method ) ||
+    ( "header" === extractioncriterion && ( headers.includes( "content-length" ) || headers.includes( "transfer-encoding" ) ) )
+      ? true
+      : false
+  )
+  const failures = results.filter( result => true !== result )
+  return failures.length === 0
+}
+
 /* return data extracted from request */
 async function extractData( req ) {
   const chunks = [];
@@ -189,7 +203,7 @@ async function handleServiceCall( service, parts, req, res ) {
     return result ? console.log( result ) : false
   }
   /* handle service call via URL */
-  else if( "GET" == req.method ) {
+  else if( !shouldExtract( req ) ) {
     result = await services.available[ service ]( config, parts )
   }
   else {
@@ -276,7 +290,7 @@ const handleFileOrProxyRequest = async function( req, res, filename ) {
 
   } catch {
 
-    if( "GET" == req.method ) {
+    if( !shouldExtract( req ) ) {
       manageProxyRequest( req, res )
     }
     else {
