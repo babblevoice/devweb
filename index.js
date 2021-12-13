@@ -3,6 +3,7 @@
 const http = require( "http" )
 const https = require( "https" )
 const fs = require( "fs" ).promises
+const { Buffer } = require( "buffer" )
 
 const config = require( "config" )
 
@@ -44,8 +45,8 @@ let host, port, localwebroot, proxyhost, accesstoken, addressredirects, mimemap
 /*
   Services can be made available from the service file path in config:
   module.exports.available = {
-    service1Name: async function() {
-      // return data
+    service1Name: async function( config, parts, data ) {
+      // return result
     }
   };
 */
@@ -154,7 +155,6 @@ fs.access( servicefilepath )
     initServer()
   } )
 
-
 /* Startup functions */
 
 function handleArgs() {
@@ -186,7 +186,7 @@ function handleArgs() {
     const parts = getURLParts( arg )
     if( parts.route[ 0 ] === "/" && parts.route.slice( 1 ) in services.available ) {
       usedArg = true
-      await invokeService( parts.route.slice( 1 ), parts )
+      await handleServiceCall( parts.route.slice( 1 ), parts )
     }
 
     if( !usedArg ) console.log( "No option or service found for argument", arg )
@@ -194,7 +194,16 @@ function handleArgs() {
 }
 
 function pullConfig() {
-  ( { host = defaultHost, port = defaultPort, localwebroot, proxyhost: weblocation, accesstoken, addressredirects, mimemap } = c )
+  ( {
+      host = defaultHost,
+      port = defaultPort,
+      localwebroot,
+      proxyhost: weblocation,
+      accesstoken,
+      addressredirects,
+      extractioncriteria = [ "method" ],
+      mimemap
+    } = c )
 }
 
 function initServer() {
@@ -206,35 +215,22 @@ function initServer() {
     /* handle any path part replacement */
     let url = redirectaddress( req.url )
     req.url = url;
-    let data = "";
 
     const parts = getURLParts( url )
 
     /* check whether service and if so call */
     if( parts.route.slice( 1 ) in services.available ) {
-      data = await invokeService( parts.route.slice( 1 ), parts, req, res )
+      await handleServiceCall( parts.route.slice( 1 ), parts, req, res )
     }
-    /* get file or make proxy request */
+    /* serve file or manage proxy request */
     else {
       const filename = ( "/" == url ) ? url += "index.html" : parts.route
-      data = await handleFileOrProxy( req, res, filename )
+      await handleFileOrProxyRequest( req, res, filename )
     }
-
-    if( "proxied" == data ) return
-
-    const filext = /(?:\.([^.]+))?$/.exec( req.url )
-    const mimetype = mimemap[ filext[ 0 ] ] || "text/html"
-
-    res.setHeader( "Content-Type", mimetype )
-    res.setHeader( "Cache-Control", "public, max-age=0" );
-    res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
-
-    res.writeHead( 200 )
-    res.end( data )
   } )
 
   server.listen( port, host, () => {
-    console.log( `Serving from directory ${ localwebroot } at http://${ host }:${ port }` )
+    console.log( `Serving from directory ${localwebroot} at http://${host}:${port}` )
   } )
 }
 
@@ -276,14 +272,70 @@ function redirectaddress( addr ) {
 
 /* Request handling */
 
-/* return result from service call */
-async function invokeService( service, parts, req = {}, res = {} ) {
-  console.log( `Calling service ${ service }` )
-  return await services.available[ service ]( config, parts, req.body )
+/* return true if data extraction criteria met */
+function shouldExtract( req ) {
+  const headers = Object.keys( req.headers ).map( key => key.toLowerCase() )
+  const results = extractioncriteria.map( extractioncriterion =>
+    ( "method" === extractioncriterion && "GET" !== req.method ) ||
+    ( "header" === extractioncriterion && ( headers.includes( "content-length" ) || headers.includes( "transfer-encoding" ) ) )
+      ? true
+      : false
+  )
+  const failures = results.filter( result => true !== result )
+  return failures.length === 0
 }
 
-/* respond having proxied request */
-function proxrequest( req, res, data ) {
+/* return data extracted from request */
+async function extractData( req ) {
+  const chunks = [];
+  for await ( chunk of req ) {
+    chunks.push( chunk );
+  }
+  const data = Buffer.concat( chunks ).toString()
+  return data
+}
+
+/* make service call and respond with result or log if any */
+async function handleServiceCall( service, parts, req, res ) {
+
+  console.log( `Calling service ${ service }` )
+
+  let result
+  /* handle service call via CLI */
+  if( "undefined" === typeof req ) {
+    result = await services.available[ service ]( config, parts )
+    return result ? console.log( result ) : false
+  }
+  /* handle service call via URL */
+  else if( !shouldExtract( req ) ) {
+    result = await services.available[ service ]( config, parts )
+  }
+  else {
+    const data = await extractData( req )
+    result = await services.available[ service ]( config, parts, data )
+  }
+  sendResponse( res, result )
+}
+
+/* respond with file */
+function serveFile( req, res, filename, data ) {
+
+  console.log( `Serving local copy of ${ filename.slice( 1 ) }` )
+
+  const filext = /(?:\.([^.]+))?$/.exec( req.url )
+  const mimetype = mimemap[ filext[ 0 ] ] || "text/html"
+
+  res.setHeader( "Content-Type", mimetype )
+  res.setHeader( "Cache-Control", "public, max-age=0" );
+  res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
+
+  sendResponse( res, data )
+}
+
+/* respond with proxy response */
+function manageProxyRequest( req, res, data ) {
+
+  console.log( `Passing request to server` )
 
   /* default options object for GET method */
   const options = {
@@ -308,9 +360,7 @@ function proxrequest( req, res, data ) {
     console.log( "- headers:", resp.headers)
 
     if( 404 === resp.statusCode ) {
-      res.writeHead( 404 )
-      res.end( "Not found on remote" )
-      return
+      return sendResponse( res, "Not found on remote", 404 )
     }
 
     res.setHeader( "Content-Type", resp.headers[ "content-type" ] )
@@ -327,43 +377,34 @@ function proxrequest( req, res, data ) {
   } )
 
   httpsreq.on( "error", ( err ) => {
-    res.writeHead( 500 )
-    res.end( "Server error - sorry" )
+    sendResponse( res, "Server error - sorry", 500 )
   } )
 
   if( "GET" != req.method ) httpsreq.write( data )
   httpsreq.end()
 }
 
-/* return local file or initiate proxy request */
-async function handleFileOrProxy( req, res, filename ) {
-
-  let data
+const handleFileOrProxyRequest = async function( req, res, filename ) {
 
   /* check whether file and if not assume URL and make request */
   try {
 
-    data = await fs.readFile( localwebroot + filename, "utf8" )
-    console.log( `Serving local copy of ${ filename.slice( 1 ) }` )
+    const data = await fs.readFile( localwebroot + filename, "utf8" )
+    serveFile( req, res, filename, data )
 
   } catch {
 
-    console.log( `Passing request to server` )
-
-    if( "GET" == req.method ) {
-      proxrequest( req, res )
+    if( !shouldExtract( req ) ) {
+      manageProxyRequest( req, res )
     }
     else {
-      let data = '';
-      req.on('data', chunk => {
-        data += chunk;
-      } )
-      req.on('end', () => {
-        proxrequest( req, res, data )
-      } )
+      const data = await extractData( req )
+      manageProxyRequest( req, res, data )
     }
-    return "proxied"
   }
+}
 
-  return data
+const sendResponse = function( res, data, status = 200 ) {
+  res.writeHead( status )
+  res.end( data )
 }

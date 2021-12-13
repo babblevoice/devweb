@@ -1,6 +1,6 @@
 # devweb
 
-A simple web proxy server to help develop a local web app against a remote api server (or similar structure).
+A simple web proxy server to help develop a local web app against a remote API server (or similar structure).
 
 ## Installation
 
@@ -40,6 +40,17 @@ You will require a config directory containing a default.json file, with content
   }
 }
 ```
+
+### Other config items
+
+Other config items may be added, notably an `extractioncriteria` array.
+
+If an `extractioncriteria` array is present in the configuration file, it will be used in determining whether the request body should be extracted. The array may contain one or both of the strings `"method"` and `"header"`, with the following cumulative effects:
+
+- `"method"` - extract the request body if the request method is not `GET`
+- `"header"` - extract the request body if one or both of the `Content-Length` and `Transfer-Encoding` headers is set
+
+The default `extractioncriteria` value is `[ "method" ]`, i.e. extract if the request method is not `GET`.
 
 ## Server startup
 
@@ -91,10 +102,19 @@ Services can be provided in a services.js file, with content corresponding to th
 
 ```js
 module.exports.available = {
-  service1Name: async function() {
-    // return data
+  service1Name: async function( config, parts, data ) {
+    // return result
   }
 };
 ```
 
 If the services.js file is found at the service file path specified in config/default.json, the methods on its `available` object are imported. If a route called matches the name of a method, the method is invoked and its return value passed back.
+
+The following values are passed to each method:
+
+1. the object parsed from the JSON config (`config`)
+2. the object returned from the utility function `getURLParts` invoked with the request URL (`parts`)
+
+Also passed if the request body is extracted (see [Other config items](#other-config-items) above):
+
+3. the extracted request body (`data`)
