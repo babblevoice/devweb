@@ -34,9 +34,10 @@ const defaultPort = 8000
 */
 
 /* get devweb settings, assign servicefilepath and declare remaining */
-const c = { ...config.devweb }
-const { servicefilepath } = c
 
+const c = { ...config.devweb }
+
+let { servicefilepath } = c
 let host, port, localwebroot, proxyhost, accesstoken, addressredirects, mimemap
 
 
@@ -101,7 +102,11 @@ function showHelpText() {
 
 function setConfigItem( [ key, value ] ) {
   /* handle config item of primitive type */
-  if( [ "string", "number", "boolean" ].includes( typeof c[ key ] ) ) {
+  if( "string" === typeof c[ key ] ) {
+    console.log( `Setting ${ key } to '${ value }'` )
+    c[ key ] = value
+  }
+  if( [ "number", "boolean" ].includes( typeof c[ key ] ) ) {
     console.log( `Setting ${ key } to ${ value }` )
     if( "number" === typeof c[ key ] ) value = parseInt( value )
     if( "boolean" === typeof c[ key ] ) value = value.toLowerCase() === "true" ? true : false
@@ -109,20 +114,20 @@ function setConfigItem( [ key, value ] ) {
   }
   /* handle config item where array */
   else if( Array.isArray( c[ key ] ) ) {
-    console.log( `Setting ${ key } to hold ${ value.split( "," ).join( ", " ) }` )
     const valueArr = value ? value.split( "," ) : []
+    console.log( `Setting ${ key } to`, valueArr )
     c[ key ] = valueArr
   }
   /* handle config item of type object */
   else if( "object" === typeof c[ key ] ) {
     const valuePair = value ? value.split( ":" ) : []
     if( 2 !== valuePair.length ) return console.log( "Command-line argument to set ${ key } unclear - not set" )
-    console.log( `Setting ${ key } to hold key ${ valuePair[ 0 ] } with value ${ valuePair[ 1 ] }` )
+    console.log( `Setting ${ key } to hold key '${ valuePair[ 0 ] }' with value '${ valuePair[ 1 ] }'` )
     c[ key ] = { ...c[ key ], ...Object.fromEntries( [ valuePair ] ) }
   }
   /* handle non-config item */
   if( !Object.keys( c ).includes( key ) ) {
-    console.log( `Setting ${ key } to ${ value }` )
+    console.log( `Setting ${ key } to '${ value }'` )
     c[ key ] = value
   }
 }
@@ -131,39 +136,38 @@ function setConfigItem( [ key, value ] ) {
 /* Startup process */
 
 /*
-   check for services, require if present, parse any command-line arguments,
-   assign core devweb config items and start server
+   parse CLI args for any flags and apply if present, assign core devweb config items,
+   check for service file and require if present, parse CLI args for any services and
+   start server
 */
+
+handleArgsFlags()
+pullConfig()
+
 fs.access( servicefilepath )
-  .then( res => {
-    console.log( `Including services in file ${servicefilepath}` )
-  } )
-  .catch( err => {
-    console.log( "No services file found" )
-  } )
   .then( () => {
+    console.log( `Including services in file ${servicefilepath}` )
     services = { available: { ...services.available, ...require( servicefilepath ).available } }
     const availableStr = Object.keys( services.available ).map( key => " /" + key ).join( "\n" )
     console.log( availableStr ? "Available:\n" + availableStr : "No services made available" )
   } )
   .catch( err => {
-    console.log( `Services file unsuitable - ${err}` )
+    console.log( `Unable to use services file - ${err}` )
   } )
   .then( () => {
-    handleArgs()
-    pullConfig()
+    handleArgsServices()
     initServer()
   } )
 
 /* Startup functions */
 
-function handleArgs() {
+function handleArgsFlags() {
 
   const args = process.argv.slice( process.argv.indexOf( __filename ) + 1 )
 
   args.forEach( async ( arg, argInd, argArr ) => {
 
-    if( ![ "-", "--", "/" ].includes( arg[ 0 ] ) ) return
+    if( ![ "-", "--" ].includes( arg[ 0 ] ) ) return
 
     let usedArg = false
 
@@ -182,6 +186,21 @@ function handleArgs() {
         allPars && argArr.splice( argInd, argInd + numPars ) // remove from args array any params passed
       }
     } )
+
+    if( !usedArg ) console.log( "No option found for argument", arg )
+  } )
+}
+
+function handleArgsServices() {
+
+  const args = process.argv.slice( process.argv.indexOf( __filename ) + 1 )
+
+  args.forEach( async ( arg, argInd, argArr ) => {
+
+    if( ![ "/" ].includes( arg[ 0 ] ) ) return
+
+    let usedArg = false
+
     /* check whether service and if so call */
     const parts = getURLParts( arg )
     if( parts.route[ 0 ] === "/" && parts.route.slice( 1 ) in services.available ) {
@@ -189,7 +208,7 @@ function handleArgs() {
       await handleServiceCall( parts.route.slice( 1 ), parts )
     }
 
-    if( !usedArg ) console.log( "No option or service found for argument", arg )
+    if( !usedArg ) console.log( "No service found for argument", arg )
   } )
 }
 
@@ -202,7 +221,8 @@ function pullConfig() {
       accesstoken,
       addressredirects,
       extractioncriteria = [ "method" ],
-      mimemap
+      mimemap,
+      servicefilepath
     } = c )
 }
 
