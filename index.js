@@ -7,10 +7,11 @@ const { Buffer } = require( "buffer" )
 
 const config = require( "config" )
 
+
 /* Initialization */
 
-const host = "localhost"
-const port = 8000
+const defaultHost = "localhost"
+const defaultPort = 8000
 
 /*
   You will require a config file (default path: ./config/default.json):
@@ -32,16 +33,15 @@ const port = 8000
   }
 */
 
-/* assign settings from config file */
-const localwebroot = config.get( "devweb.localwebroot" )
-const weblocation = config.get( "devweb.proxyhost" )
-const accesstoken = config.get( "devweb.accesstoken" )
-const addressredirects = config.get( "devweb.addressredirects" )
-const extractioncriteria = config.has( "devweb.extractioncriteria" ) ? config.get( "devweb.extractioncriteria" ) : [ "method" ]
-const mimemap = config.get( "devweb.mimemap" )
-const servicefilepath = config.get ( "devweb.servicefilepath" )
+/* get devweb settings, assign servicefilepath and declare remaining */
 
-/* Modification */
+const c = { ...config.devweb }
+
+let { servicefilepath } = c
+let host, port, localwebroot, proxyhost, accesstoken, addressredirects, mimemap
+
+
+/* Customization */
 
 /*
   Services can be made available from the service file path in config:
@@ -54,62 +54,120 @@ const servicefilepath = config.get ( "devweb.servicefilepath" )
 
 let services = { available: {} };
 
-/* check for services, require if present and parse any command-line arguments */
-fs.access( servicefilepath )
-  .then( res => {
-    console.log( `Including services in file ${servicefilepath}` )
-  } )
-  .catch( err => {
-    console.log( "No services file found" )
-  } )
-  .then( () => {
-    services = { available: { ...services.available, ...require( servicefilepath ).available } }
-    const availableStr = Object.keys( services.available ).map( key => " /" + key ).join( "\n" )
-    console.log( availableStr ? "Available:\n" + availableStr : "No services made available" )
-  } )
-  .catch( err => {
-    console.log( `Services file unsuitable - ${err}` )
-  } )
-  .then( () => {
-    handleArgs()
-  } )
-
 /*
   Arguments to the server can be passed after the filename at startup:
+
   > node index.js --flag /service?key=value
 
-  Each option is defined in an object included in the flags array:
+  Each option is defined in an object included in the flags array,
+  w/ an action, one or both of a long and short form, any params and
+  an optional summary:
+
   const flags = [
     {
       long: "flag",
       short: "f",
       intent: "triggers an action",
-      action: function() {
+      params: 1, // default 0
+      action: function( param ) {
         // do something
       }
     }
   ]
 */
 
-function handleArgs() {
+const flags = [
+  {
+    long: "help",
+    short: "h",
+    intent: "show help text and exit",
+    action: showHelpText
+  },
+  {
+    long: "set",
+    short: "s",
+    intent: "set a config item, arrays comma-separated (e.g. -s arr \"1,2\") & nested key-value pairs colon-separated (e.g. -s obj \"k:v\")",
+    params: 2,
+    action: setConfigItem
+  }
+]
+
+/* Option actions */
+
+function showHelpText() {
+  const optionsStr = flags.map( f => [ f.long && " --" + f.long, f.short && " -" + f.short, f.intent && f.intent ].join( "\t" ) ).join( "\n" )
+  console.log( "Options:\n" + optionsStr )
+  process.exit()
+}
+
+function setConfigItem( [ key, value ] ) {
+  /* handle config item of primitive type */
+  if( "string" === typeof c[ key ] ) {
+    console.log( `Setting ${ key } to '${ value }'` )
+    c[ key ] = value
+  }
+  if( [ "number", "boolean" ].includes( typeof c[ key ] ) ) {
+    console.log( `Setting ${ key } to ${ value }` )
+    if( "number" === typeof c[ key ] ) value = parseInt( value )
+    if( "boolean" === typeof c[ key ] ) value = value.toLowerCase() === "true" ? true : false
+    c[ key ] = value
+  }
+  /* handle config item where array */
+  else if( Array.isArray( c[ key ] ) ) {
+    const valueArr = value ? value.split( "," ) : []
+    console.log( `Setting ${ key } to`, valueArr )
+    c[ key ] = valueArr
+  }
+  /* handle config item of type object */
+  else if( "object" === typeof c[ key ] ) {
+    const valuePair = value ? value.split( ":" ) : []
+    if( 2 !== valuePair.length ) return console.log( "Command-line argument to set ${ key } unclear - not set" )
+    console.log( `Setting ${ key } to hold key '${ valuePair[ 0 ] }' with value '${ valuePair[ 1 ] }'` )
+    c[ key ] = { ...c[ key ], ...Object.fromEntries( [ valuePair ] ) }
+  }
+  /* handle non-config item */
+  if( !Object.keys( c ).includes( key ) ) {
+    console.log( `Setting ${ key } to '${ value }'` )
+    c[ key ] = value
+  }
+}
+
+
+/* Startup process */
+
+/*
+   parse CLI args for any flags and apply if present, assign core devweb config items,
+   check for service file and require if present, parse CLI args for any services and
+   start server
+*/
+
+handleArgsFlags()
+pullConfig()
+
+fs.access( servicefilepath )
+  .then( () => {
+    console.log( `Including services in file ${servicefilepath}` )
+    services = { available: { ...services.available, ...require( servicefilepath ).available } }
+    const availableStr = Object.keys( services.available ).map( key => " /" + key ).join( "\n" )
+    console.log( availableStr ? "Available:\n" + availableStr : "No services made available" )
+  } )
+  .catch( err => {
+    console.log( `Unable to use services file - ${err}` )
+  } )
+  .then( () => {
+    handleArgsServices()
+    initServer()
+  } )
+
+/* Startup functions */
+
+function handleArgsFlags() {
 
   const args = process.argv.slice( process.argv.indexOf( __filename ) + 1 )
 
-  /* list available flags, each w/ action, one or both of long and short form and optional summary */
-  const flags = [
-    {
-      long: "help",
-      short: "h",
-      intent: "show help text and exit",
-      action: () => {
-        const optionsStr = flags.map( f => [ f.long && " --" + f.long, f.short && " -" + f.short, f.intent && f.intent ].join( "\t" ) ).join( "\n" )
-        console.log( "Options:\n" + optionsStr )
-        process.exit()
-      }
-    }
-  ]
+  args.forEach( async ( arg, argInd, argArr ) => {
 
-  args.forEach( async arg => {
+    if( ![ "-", "--" ].includes( arg[ 0 ] ) ) return
 
     let usedArg = false
 
@@ -118,9 +176,31 @@ function handleArgs() {
       if( arg === "-" + flag.short || arg === "--" + flag.long ) {
         usedArg = true
         console.log( "Applying option for flag", arg )
-        flag.action()
+        const nextInd = argInd + 1
+        const numPars = flag.params || 0
+        const allPars = numPars && args.slice( nextInd, nextInd + numPars )
+        if( allPars.length < numPars ) return console.log( "Insufficient arguments to option", arg )
+        allPars
+          ? flag.action( allPars.length === 1 ? allPars[ 0 ] : allPars )
+          : flag.action()
+        allPars && argArr.splice( argInd, argInd + numPars ) // remove from args array any params passed
       }
     } )
+
+    if( !usedArg ) console.log( "No option found for argument", arg )
+  } )
+}
+
+function handleArgsServices() {
+
+  const args = process.argv.slice( process.argv.indexOf( __filename ) + 1 )
+
+  args.forEach( async ( arg, argInd, argArr ) => {
+
+    if( ![ "/" ].includes( arg[ 0 ] ) ) return
+
+    let usedArg = false
+
     /* check whether service and if so call */
     const parts = getURLParts( arg )
     if( parts.route[ 0 ] === "/" && parts.route.slice( 1 ) in services.available ) {
@@ -128,9 +208,52 @@ function handleArgs() {
       await handleServiceCall( parts.route.slice( 1 ), parts )
     }
 
-    if( !usedArg ) console.log( "No option or service found for argument", arg )
+    if( !usedArg ) console.log( "No service found for argument", arg )
   } )
 }
+
+function pullConfig() {
+  ( {
+      host = defaultHost,
+      port = defaultPort,
+      localwebroot,
+      proxyhost: weblocation,
+      accesstoken,
+      addressredirects,
+      extractioncriteria = [ "method" ],
+      mimemap,
+      servicefilepath
+    } = c )
+}
+
+function initServer() {
+
+  const server = http.createServer( async function ( req, res ) {
+
+    console.log( "Received request:", req.method, req.url )
+
+    /* handle any path part replacement */
+    let url = redirectaddress( req.url )
+    req.url = url;
+
+    const parts = getURLParts( url )
+
+    /* check whether service and if so call */
+    if( parts.route.slice( 1 ) in services.available ) {
+      await handleServiceCall( parts.route.slice( 1 ), parts, req, res )
+    }
+    /* serve file or manage proxy request */
+    else {
+      const filename = ( "/" == url ) ? url += "index.html" : parts.route
+      await handleFileOrProxyRequest( req, res, filename )
+    }
+  } )
+
+  server.listen( port, host, () => {
+    console.log( `Serving from directory ${localwebroot} at http://${host}:${port}` )
+  } )
+}
+
 
 /* Utility functions */
 
@@ -157,14 +280,15 @@ function getURLParts( url ) {
 
 /* return URL with path part(s) replaced or not per addressredirects setting */
 function redirectaddress( addr ) {
-  for (key in addressredirects) {
+  for ( key in addressredirects ) {
     if( 0 == addr.indexOf( key ) ) {
-      addr = addr.replace( key, addressredirects[ key ] );
+      addr = addr.replace( key, addressredirects[ key ] )
       console.log( `Redirecting to ${ addr }` )
     }
   }
   return addr
 }
+
 
 /* Request handling */
 
@@ -304,30 +428,3 @@ const sendResponse = function( res, data, status = 200 ) {
   res.writeHead( status )
   res.end( data )
 }
-
-/* Server setup */
-
-const server = http.createServer( async function ( req, res ) {
-
-  console.log( "Received request:", req.method, req.url )
-
-  /* handle any path part replacement */
-  let url = redirectaddress( req.url )
-  req.url = url;
-
-  const parts = getURLParts( url )
-
-  /* check whether service and if so call */
-  if( parts.route.slice( 1 ) in services.available ) {
-    await handleServiceCall( parts.route.slice( 1 ), parts, req, res )
-  }
-  /* serve file or manage proxy request */
-  else {
-    const filename = ( "/" == url ) ? url += "index.html" : parts.route
-    await handleFileOrProxyRequest( req, res, filename )
-  }
-} )
-
-server.listen( port, host, () => {
-  console.log( `Serving from directory ${localwebroot} at http://${host}:${port}` )
-} )

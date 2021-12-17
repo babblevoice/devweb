@@ -79,9 +79,11 @@ One or more arguments can be passed to the server at startup. These are listed a
 node index.js --flag -f /service?key=value
 ```
 
+Any option flags passed are parsed first to allow a service file path to be set or overridden, then any service names.
+
 ## Option definition
 
-Each option is defined in an object included in the `flags` array. The object should include a function to be invoked if the flag is passed (`action`) and the flag itself in one or both of a long form (`long`) or short form (`short`), and may include a summary of the action performed (`intent`).
+Each option is defined in an object included in the `flags` array. The object should include a function to be invoked if the flag is passed (`action`), the flag itself in one or both of a long form (`long`) or short form (`short`) and the number of arguments expected (`params`, default 0), and may include a summary of the action performed (`intent`).
 
 ```js
 const flags = [
@@ -89,12 +91,20 @@ const flags = [
     long: "flag",
     short: "f",
     intent: "triggers an action",
-    action: function() {
+    params: 1, // default 0
+    action: function( param ) {
       // do something
     }
   }
 ]
 ```
+
+## Default options
+
+Two default options are available:
+
+- `--help/-h`, to show the help text then exit
+- `--set/-s`, to set a config value, overriding if present or adding otherwise
 
 ## Service provision
 
