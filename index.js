@@ -78,6 +78,12 @@ let services = { available: {} };
 
 const flags = [
   {
+    long: "config",
+    short: "c",
+    intent: "show devweb config object and exit",
+    action: showConfigObj
+  },
+  {
     long: "help",
     short: "h",
     intent: "show help text and exit",
@@ -93,6 +99,12 @@ const flags = [
 ]
 
 /* Option actions */
+
+function showConfigObj() {
+  console.log( "Devweb config object:" );
+  console.log( c );
+  process.exit();
+}
 
 function showHelpText() {
   const optionsStr = flags.map( f => [ f.long && " --" + f.long, f.short && " -" + f.short, f.intent && f.intent ].join( "\t" ) ).join( "\n" )
