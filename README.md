@@ -88,8 +88,8 @@ Each option is defined in an object included in the `flags` array. The object sh
 ```js
 const flags = [
   {
-    long: "flag",
-    short: "f",
+    long:   "flag",
+    short:  "f",
     intent: "triggers an action",
     params: 1, // default 0
     action: function( param ) {

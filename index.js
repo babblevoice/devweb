@@ -65,8 +65,8 @@ let services = { available: {} };
 
   const flags = [
     {
-      long: "flag",
-      short: "f",
+      long:   "flag",
+      short:  "f",
       intent: "triggers an action",
       params: 1, // default 0
       action: function( param ) {
@@ -78,20 +78,20 @@ let services = { available: {} };
 
 const flags = [
   {
-    long: "config",
-    short: "c",
+    long:   "config",
+    short:  "c",
     intent: "show devweb config object and exit",
     action: showConfigObj
   },
   {
-    long: "help",
-    short: "h",
+    long:   "help",
+    short:  "h",
     intent: "show help text and exit",
     action: showHelpText
   },
   {
-    long: "set",
-    short: "s",
+    long:   "set",
+    short:  "s",
     intent: "set a config item, arrays comma-separated (e.g. -s arr \"1,2\") & nested key-value pairs colon-separated (e.g. -s obj \"k:v\")",
     params: 2,
     action: setConfigItem
@@ -107,7 +107,17 @@ function showConfigObj() {
 }
 
 function showHelpText() {
-  const optionsStr = flags.map( f => [ f.long && " --" + f.long, f.short && " -" + f.short, f.intent && f.intent ].join( "\t" ) ).join( "\n" )
+  const getLongest = key => Math.max( ...flags.map( f => f[ key ].length ) )
+  /*
+     generate and log a string with one line per option, in columns
+     each of a width based on the longest item listed, plus padding
+  */
+  const optionsStr = flags.map( f => [
+    " " +
+    ( f.short  &&  "-" + f.short.padEnd( getLongest( "short" ) + 2 ) ),
+    ( f.long   && "--" + f.long.padEnd( getLongest( "long" )   + 3 ) ),
+    ( f.intent && f.intent )
+  ].join( "" ) ).join( "\n" )
   console.log( "Options:\n" + optionsStr )
   process.exit()
 }
