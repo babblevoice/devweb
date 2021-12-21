@@ -83,10 +83,10 @@ Any option flags passed are parsed first to allow a service file path to be set 
 
 ## Option definition
 
-Each option is defined in an object included in the `flags` array. The object should include a function to be invoked if the flag is passed (`action`), the flag itself in one or both of a long form (`long`) or short form (`short`) and the number of arguments expected (`params`, default 0), and may include a summary of the action performed (`intent`).
+Each option is defined in an object included in the `options` array. The object should include a function to be invoked if the flag is passed (`action`), the flag itself in one or both of a long form (`long`) or short form (`short`) and the number of arguments expected (`params`, default 0), and may include a summary of the action performed (`intent`).
 
 ```js
-const flags = [
+const options = [
   {
     long:   "flag",
     short:  "f",

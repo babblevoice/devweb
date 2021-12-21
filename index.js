@@ -59,11 +59,11 @@ let services = { available: {} };
 
   > node index.js --flag /service?key=value
 
-  Each option is defined in an object included in the flags array,
+  Each option is defined in an object included in the options array,
   w/ an action, one or both of a long and short form, any params and
   an optional summary:
 
-  const flags = [
+  const options = [
     {
       long:   "flag",
       short:  "f",
@@ -76,7 +76,7 @@ let services = { available: {} };
   ]
 */
 
-const flags = [
+const options = [
   {
     long:   "config",
     short:  "c",
@@ -107,12 +107,12 @@ function showConfigObj() {
 }
 
 function showHelpText() {
-  const getLongest = key => Math.max( ...flags.map( f => f[ key ].length ) )
+  const getLongest = key => Math.max( ...options.map( f => f[ key ].length ) )
   /*
      generate and log a string with one line per option, in columns
      each of a width based on the longest item listed, plus padding
   */
-  const optionsStr = flags.map( f => [
+  const optionsStr = options.map( f => [
     " " +
     ( f.short  &&  "-" + f.short.padEnd( getLongest( "short" ) + 2 ) ),
     ( f.long   && "--" + f.long.padEnd( getLongest( "long" )   + 3 ) ),
@@ -158,10 +158,13 @@ function setConfigItem( [ key, value ] ) {
 /* Startup process */
 
 /*
-   parse CLI args for any flags and apply if present, assign core devweb config items,
-   check for service file and require if present, parse CLI args for any services and
+   get CLI args,
+   parse for and apply any flags and assign core devweb config items,
+   check for and require any service file and parse for and call any services and
    start server
 */
+
+const args = process.argv.slice( process.argv.indexOf( __filename ) + 1 )
 
 handleArgsFlags()
 pullConfig()
@@ -185,28 +188,25 @@ fs.access( servicefilepath )
 
 function handleArgsFlags() {
 
-  const args = process.argv.slice( process.argv.indexOf( __filename ) + 1 )
-
   args.forEach( async ( arg, argInd, argArr ) => {
+
+    /* return if arg neither recognized format nor available option, else apply */
 
     if( ![ "-", "--" ].includes( arg[ 0 ] ) ) return
 
     let usedArg = false
 
-    /* check whether flag and if so apply */
-    flags.forEach( flag => {
-      if( arg === "-" + flag.short || arg === "--" + flag.long ) {
-        usedArg = true
-        console.log( "Applying option for flag", arg )
-        const nextInd = argInd + 1
-        const numPars = flag.params || 0
-        const allPars = numPars && args.slice( nextInd, nextInd + numPars )
-        if( allPars.length < numPars ) return console.log( "Insufficient arguments to option", arg )
-        allPars
-          ? flag.action( allPars.length === 1 ? allPars[ 0 ] : allPars )
-          : flag.action()
-        allPars && argArr.splice( argInd, argInd + numPars ) // remove from args array any params passed
-      }
+    options.forEach( option => {
+      if( arg !== "-" + option.short && arg !== "--" + option.long ) return
+      usedArg = true
+      console.log( "Applying option for flag", arg )
+      const nextInd = argInd + 1
+      const numPars = option.params || 0
+      const allPars = numPars && args.slice( nextInd, nextInd + numPars )
+      if( allPars.length < numPars ) return console.log( "Insufficient arguments to option", arg )
+      allPars
+        ? option.action( allPars.length === 1 ? allPars[ 0 ] : allPars )
+        : option.action()
     } )
 
     if( !usedArg ) console.log( "No option found for argument", arg )
@@ -215,22 +215,16 @@ function handleArgsFlags() {
 
 function handleArgsServices() {
 
-  const args = process.argv.slice( process.argv.indexOf( __filename ) + 1 )
-
   args.forEach( async ( arg, argInd, argArr ) => {
+
+    /* return if arg neither recognized format nor available service, else call */
 
     if( ![ "/" ].includes( arg[ 0 ] ) ) return
 
-    let usedArg = false
-
-    /* check whether service and if so call */
     const parts = getURLParts( arg )
-    if( parts.route[ 0 ] === "/" && parts.route.slice( 1 ) in services.available ) {
-      usedArg = true
-      await handleServiceCall( parts.route.slice( 1 ), parts )
-    }
+    if( !( parts.route.slice( 1 ) in services.available ) ) return console.log( "No service found for argument", arg )
 
-    if( !usedArg ) console.log( "No service found for argument", arg )
+    await handleServiceCall( parts.route.slice( 1 ), parts )
   } )
 }
 
