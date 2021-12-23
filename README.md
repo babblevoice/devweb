@@ -101,8 +101,9 @@ const options = [
 
 ## Default options
 
-Two default options are available:
+Three default options are available:
 
+- `--config/-c`, to show the devweb config object then exit
 - `--help/-h`, to show the help text then exit
 - `--set/-s`, to set a config value, overriding if present or adding otherwise
 
