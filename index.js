@@ -115,7 +115,7 @@ function showHelpText() {
   const optionsStr = options.map( f => [
     " " +
     ( f.short  &&  "-" + f.short.padEnd( getLongest( "short" ) + 2 ) ),
-    ( f.long   && "--" + f.long.padEnd( getLongest( "long" )   + 3 ) ),
+    ( f.long   && "--" + f.long.padEnd(  getLongest( "long" )  + 3 ) ),
     ( f.intent && f.intent )
   ].join( "" ) ).join( "\n" )
   console.log( "Options:\n" + optionsStr )
@@ -201,9 +201,9 @@ function handleArgsFlags() {
       usedArg = true
       console.log( "Applying option for flag", arg )
       const nextInd = argInd + 1
-      const numPars = option.params || 0
-      const allPars = numPars && args.slice( nextInd, nextInd + numPars )
-      if( allPars.length < numPars ) return console.log( "Insufficient arguments to option", arg )
+      const optPars = option.params || 0
+      const allPars = optPars && args.slice( nextInd, nextInd + optPars )
+      if( allPars.length < optPars ) return console.log( "Insufficient arguments to option", arg )
       allPars
         ? option.action( allPars.length === 1 ? allPars[ 0 ] : allPars )
         : option.action()
@@ -222,9 +222,11 @@ function handleArgsServices() {
     if( ![ "/" ].includes( arg[ 0 ] ) ) return
 
     const parts = getURLParts( arg )
-    if( !( parts.route.slice( 1 ) in services.available ) ) return console.log( "No service found for argument", arg )
+    const serviceName = parts.route.slice( 1 )
 
-    await handleServiceCall( parts.route.slice( 1 ), parts )
+    if( !( serviceName in services.available ) ) return console.log( "No service found for argument", arg )
+
+    await handleServiceCall( serviceName, parts )
   } )
 }
 
@@ -249,18 +251,24 @@ function initServer() {
     console.log( "Received request:", req.method, req.url )
 
     /* handle any path part replacement */
-    let url = redirectaddress( req.url )
+
+    const url = redirectaddress( req.url )
     req.url = url;
 
+    /* get relevant values from URL then call service, serve file or make proxy request */
+
     const parts = getURLParts( url )
+    const route = parts.route
+
+    const serviceName = route.slice( 1 )
 
     /* check whether service and if so call */
-    if( parts.route.slice( 1 ) in services.available ) {
-      await handleServiceCall( parts.route.slice( 1 ), parts, req, res )
+    if( serviceName in services.available ) {
+      await handleServiceCall( serviceName, parts, req, res )
     }
     /* serve file or manage proxy request */
     else {
-      const filename = ( "/" == url ) ? url += "index.html" : parts.route
+      const filename = ( "/" === url ) ? url + "index.html" : route
       await handleFileOrProxyRequest( req, res, filename )
     }
   } )
