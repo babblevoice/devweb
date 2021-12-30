@@ -2,7 +2,10 @@
 
 const http = require( "http" )
 const https = require( "https" )
+
 const fs = require( "fs" ).promises
+const { createReadStream } = require( "fs" )
+
 const { Buffer } = require( "buffer" )
 
 const config = require( "config" )
@@ -338,7 +341,7 @@ async function handleServiceCall( service, parts, req, res ) {
 }
 
 /* respond with file */
-function serveFile( req, res, filename, data ) {
+function serveFile( req, res, filename ) {
 
   console.log( `Serving local copy of ${ filename.slice( 1 ) }` )
 
@@ -349,7 +352,13 @@ function serveFile( req, res, filename, data ) {
   res.setHeader( "Cache-Control", "public, max-age=0" );
   res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
 
-  sendResponse( res, data )
+  res.writeHead( 200 )
+
+  const stream = createReadStream( localwebroot + filename )
+  stream.pipe( res )
+  stream.on( "error", err => {
+    sendResponse( res, "Server error - sorry", 500 )
+  } )
 }
 
 /* respond with proxy response */
@@ -373,7 +382,7 @@ function manageProxyRequest( req, res, data ) {
     options.headers[ "Content-Length" ] = req.headers[ "content-length" ]
   }
 
-  const httpsreq = https.request( options, (resp) => {
+  const httpsreq = https.request( options, resp => {
 
     console.log( "Received response for request", req.method, req.url )
     console.log( "- statusCode:", resp.statusCode)
@@ -387,7 +396,7 @@ function manageProxyRequest( req, res, data ) {
     res.setHeader( "Cache-Control", "public, max-age=0" );
     res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
 
-    resp.on( "data", ( chunk ) => {
+    resp.on( "data", chunk => {
       res.write( chunk )
     } )
     // The whole response has been received. Print out the result.
@@ -396,7 +405,7 @@ function manageProxyRequest( req, res, data ) {
     } )
   } )
 
-  httpsreq.on( "error", ( err ) => {
+  httpsreq.on( "error", err => {
     sendResponse( res, "Server error - sorry", 500 )
   } )
 
@@ -409,8 +418,8 @@ const handleFileOrProxyRequest = async function( req, res, filename ) {
   /* check whether file and if not assume URL and make request */
   try {
 
-    const data = await fs.readFile( localwebroot + filename, "utf8" )
-    serveFile( req, res, filename, data )
+    await fs.access( localwebroot + filename )
+    serveFile( req, res, filename )
 
   } catch {
 
