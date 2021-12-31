@@ -149,13 +149,13 @@ pullConfig()
 
 fs.access( servicefilepath )
   .then( () => {
-    console.log( `Including services in file ${servicefilepath}` )
+    console.log( `Including services in file ${ servicefilepath }` )
     services = { available: { ...services.available, ...require( servicefilepath ).available } }
     const availableStr = Object.keys( services.available ).map( key => " /" + key ).join( "\n" )
     console.log( availableStr ? "Available:\n" + availableStr : "No services made available" )
   } )
   .catch( err => {
-    console.log( `Unable to use services file - ${err}` )
+    console.log( `Unable to use services file - ${ err }` )
   } )
   .then( () => {
     handleArgsServices()
@@ -253,7 +253,7 @@ function initServer() {
   } )
 
   server.listen( port, host, () => {
-    console.log( `Serving from directory ${localwebroot} at http://${host}:${port}` )
+    console.log( `Serving from directory ${ localwebroot } at http://${ host }:${ port }` )
   } )
 }
 
@@ -357,6 +357,7 @@ function serveFile( req, res, filename ) {
   const stream = createReadStream( localwebroot + filename )
   stream.pipe( res )
   stream.on( "error", err => {
+    console.log( `Unable to serve file ${ filename } - ${ err }` )
     sendResponse( res, "Server error - sorry", 500 )
   } )
 }
@@ -372,7 +373,7 @@ function manageProxyRequest( req, res, data ) {
     path: req.url,
     method: req.method,
     headers: {
-      'Authorization': `Bearer ${accesstoken}`,
+      'Authorization': `Bearer ${ accesstoken }`,
     }
   }
 
@@ -406,6 +407,7 @@ function manageProxyRequest( req, res, data ) {
   } )
 
   httpsreq.on( "error", err => {
+    console.log( `Unable to complete proxy request for ${ req.method } ${ req.url } - ${ err }` )
     sendResponse( res, "Server error - sorry", 500 )
   } )
 
