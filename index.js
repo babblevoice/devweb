@@ -397,13 +397,7 @@ function manageProxyRequest( req, res, data ) {
     res.setHeader( "Cache-Control", "public, max-age=0" );
     res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
 
-    resp.on( "data", chunk => {
-      res.write( chunk )
-    } )
-    // The whole response has been received. Print out the result.
-    resp.on( "end", () => {
-      res.end( () => {} )
-    } )
+    resp.pipe( res )
   } )
 
   httpsreq.on( "error", err => {
