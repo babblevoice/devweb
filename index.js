@@ -108,14 +108,16 @@ function showConfigObj() {
 
 function showHelpText() {
   const getLongest = key => Math.max( ...options.map( f => f[ key ].length ) )
+  const longestShort = getLongest( "short" )
+  const longestLong = getLongest( "long" )
   /*
      generate and log a string with one line per option, in columns
      each of a width based on the longest item listed, plus padding
   */
   const optionsStr = options.map( f => [
     " " +
-    ( f.short  &&  "-" + f.short.padEnd( getLongest( "short" ) + 2 ) ),
-    ( f.long   && "--" + f.long.padEnd(  getLongest( "long" )  + 3 ) ),
+    ( f.short  &&  "-" + f.short.padEnd( longestShort + 2 ) ),
+    ( f.long   && "--" + f.long.padEnd(  longestLong  + 3 ) ),
     ( f.intent && f.intent )
   ].join( "" ) ).join( "\n" )
   console.log( "Options:\n" + optionsStr )
