@@ -2,7 +2,10 @@
 
 const http = require( "http" )
 const https = require( "https" )
+
 const fs = require( "fs" ).promises
+const { createReadStream } = require( "fs" )
+
 const { Buffer } = require( "buffer" )
 
 const config = require( "config" )
@@ -173,13 +176,13 @@ pullConfig()
 
 fs.access( servicefilepath )
   .then( () => {
-    console.log( `Including services in file ${servicefilepath}` )
+    console.log( `Including services in file ${ servicefilepath }` )
     services = { available: { ...services.available, ...require( servicefilepath ).available } }
     const availableStr = Object.keys( services.available ).map( key => " /" + key ).join( "\n" )
     console.log( availableStr ? "Available:\n" + availableStr : "No services made available" )
   } )
   .catch( err => {
-    console.log( `Unable to use services file - ${err}` )
+    console.log( `Unable to use services file - ${ err }` )
   } )
   .then( () => {
     handleArgsServices()
@@ -276,7 +279,7 @@ function initServer() {
   } )
 
   server.listen( port, host, () => {
-    console.log( `Serving from directory ${localwebroot} at http://${host}:${port}` )
+    console.log( `Serving from directory ${ localwebroot } at http://${ host }:${ port }` )
   } )
 }
 
@@ -364,7 +367,7 @@ async function handleServiceCall( service, parts, req, res ) {
 }
 
 /* respond with file */
-function serveFile( req, res, filename, data ) {
+function serveFile( req, res, filename ) {
 
   console.log( `Serving local copy of ${ filename.slice( 1 ) }` )
 
@@ -375,7 +378,14 @@ function serveFile( req, res, filename, data ) {
   res.setHeader( "Cache-Control", "public, max-age=0" );
   res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
 
-  sendResponse( res, data )
+  res.writeHead( 200 )
+
+  const stream = createReadStream( localwebroot + filename )
+  stream.pipe( res )
+  stream.on( "error", err => {
+    console.log( `Unable to serve file ${ filename } - ${ err }` )
+    sendResponse( res, "Server error - sorry", 500 )
+  } )
 }
 
 /* respond with proxy response */
@@ -389,7 +399,7 @@ function manageProxyRequest( req, res, data ) {
     path: req.url,
     method: req.method,
     headers: {
-      'Authorization': `Bearer ${accesstoken}`,
+      'Authorization': `Bearer ${ accesstoken }`,
     }
   }
 
@@ -399,7 +409,7 @@ function manageProxyRequest( req, res, data ) {
     options.headers[ "Content-Length" ] = req.headers[ "content-length" ]
   }
 
-  const httpsreq = https.request( options, (resp) => {
+  const httpsreq = https.request( options, resp => {
 
     console.log( "Received response for request", req.method, req.url )
     console.log( "- statusCode:", resp.statusCode)
@@ -413,16 +423,11 @@ function manageProxyRequest( req, res, data ) {
     res.setHeader( "Cache-Control", "public, max-age=0" );
     res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
 
-    resp.on( "data", ( chunk ) => {
-      res.write( chunk )
-    } )
-    // The whole response has been received. Print out the result.
-    resp.on( "end", () => {
-      res.end( () => {} )
-    } )
+    resp.pipe( res )
   } )
 
-  httpsreq.on( "error", ( err ) => {
+  httpsreq.on( "error", err => {
+    console.log( `Unable to complete proxy request for ${ req.method } ${ req.url } - ${ err }` )
     sendResponse( res, "Server error - sorry", 500 )
   } )
 
@@ -435,8 +440,8 @@ const handleFileOrProxyRequest = async function( req, res, filename ) {
   /* check whether file and if not assume URL and make request */
   try {
 
-    const data = await fs.readFile( localwebroot + filename, "utf8" )
-    serveFile( req, res, filename, data )
+    await fs.access( localwebroot + filename )
+    serveFile( req, res, filename )
 
   } catch {
 
