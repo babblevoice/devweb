@@ -62,14 +62,14 @@ let services = { available: {} };
 
   > node index.js --flag /service?key=value
 
-  Each option is defined in an object included in the flags array,
+  Each option is defined in an object included in the options array,
   w/ an action, one or both of a long and short form, any params and
   an optional summary:
 
-  const flags = [
+  const options = [
     {
-      long: "flag",
-      short: "f",
+      long:   "flag",
+      short:  "f",
       intent: "triggers an action",
       params: 1, // default 0
       action: function( param ) {
@@ -79,16 +79,22 @@ let services = { available: {} };
   ]
 */
 
-const flags = [
+const options = [
   {
-    long: "help",
-    short: "h",
+    long:   "config",
+    short:  "c",
+    intent: "show devweb config object and exit",
+    action: showConfigObj
+  },
+  {
+    long:   "help",
+    short:  "h",
     intent: "show help text and exit",
     action: showHelpText
   },
   {
-    long: "set",
-    short: "s",
+    long:   "set",
+    short:  "s",
     intent: "set a config item, arrays comma-separated (e.g. -s arr \"1,2\") & nested key-value pairs colon-separated (e.g. -s obj \"k:v\")",
     params: 2,
     action: setConfigItem
@@ -97,8 +103,26 @@ const flags = [
 
 /* Option actions */
 
+function showConfigObj() {
+  console.log( "Devweb config object:" );
+  console.log( c );
+  process.exit();
+}
+
 function showHelpText() {
-  const optionsStr = flags.map( f => [ f.long && " --" + f.long, f.short && " -" + f.short, f.intent && f.intent ].join( "\t" ) ).join( "\n" )
+  const getLongest = key => Math.max( ...options.map( f => f[ key ].length ) )
+  const longestShort = getLongest( "short" )
+  const longestLong = getLongest( "long" )
+  /*
+     generate and log a string with one line per option, in columns
+     each of a width based on the longest item listed, plus padding
+  */
+  const optionsStr = options.map( f => [
+    " " +
+    ( f.short  &&  "-" + f.short.padEnd( longestShort + 2 ) ),
+    ( f.long   && "--" + f.long.padEnd(  longestLong  + 3 ) ),
+    ( f.intent && f.intent )
+  ].join( "" ) ).join( "\n" )
   console.log( "Options:\n" + optionsStr )
   process.exit()
 }
@@ -139,10 +163,13 @@ function setConfigItem( [ key, value ] ) {
 /* Startup process */
 
 /*
-   parse CLI args for any flags and apply if present, assign core devweb config items,
-   check for service file and require if present, parse CLI args for any services and
+   get CLI args,
+   parse for and apply any flags and assign core devweb config items,
+   check for and require any service file and parse for and call any services and
    start server
 */
+
+const args = process.argv.slice( process.argv.indexOf( __filename ) + 1 )
 
 handleArgsFlags()
 pullConfig()
@@ -166,28 +193,25 @@ fs.access( servicefilepath )
 
 function handleArgsFlags() {
 
-  const args = process.argv.slice( process.argv.indexOf( __filename ) + 1 )
-
   args.forEach( async ( arg, argInd, argArr ) => {
+
+    /* return if arg neither recognized format nor available option, else apply */
 
     if( ![ "-", "--" ].includes( arg[ 0 ] ) ) return
 
     let usedArg = false
 
-    /* check whether flag and if so apply */
-    flags.forEach( flag => {
-      if( arg === "-" + flag.short || arg === "--" + flag.long ) {
-        usedArg = true
-        console.log( "Applying option for flag", arg )
-        const nextInd = argInd + 1
-        const numPars = flag.params || 0
-        const allPars = numPars && args.slice( nextInd, nextInd + numPars )
-        if( allPars.length < numPars ) return console.log( "Insufficient arguments to option", arg )
-        allPars
-          ? flag.action( allPars.length === 1 ? allPars[ 0 ] : allPars )
-          : flag.action()
-        allPars && argArr.splice( argInd, argInd + numPars ) // remove from args array any params passed
-      }
+    options.forEach( option => {
+      if( arg !== "-" + option.short && arg !== "--" + option.long ) return
+      usedArg = true
+      console.log( "Applying option for flag", arg )
+      const nextInd = argInd + 1
+      const optPars = option.params || 0
+      const allPars = optPars && args.slice( nextInd, nextInd + optPars )
+      if( allPars.length < optPars ) return console.log( "Insufficient arguments to option", arg )
+      allPars
+        ? option.action( allPars.length === 1 ? allPars[ 0 ] : allPars )
+        : option.action()
     } )
 
     if( !usedArg ) console.log( "No option found for argument", arg )
@@ -196,22 +220,18 @@ function handleArgsFlags() {
 
 function handleArgsServices() {
 
-  const args = process.argv.slice( process.argv.indexOf( __filename ) + 1 )
-
   args.forEach( async ( arg, argInd, argArr ) => {
+
+    /* return if arg neither recognized format nor available service, else call */
 
     if( ![ "/" ].includes( arg[ 0 ] ) ) return
 
-    let usedArg = false
-
-    /* check whether service and if so call */
     const parts = getURLParts( arg )
-    if( parts.route[ 0 ] === "/" && parts.route.slice( 1 ) in services.available ) {
-      usedArg = true
-      await handleServiceCall( parts.route.slice( 1 ), parts )
-    }
+    const serviceName = parts.route.slice( 1 )
 
-    if( !usedArg ) console.log( "No service found for argument", arg )
+    if( !( serviceName in services.available ) ) return console.log( "No service found for argument", arg )
+
+    await handleServiceCall( serviceName, parts )
   } )
 }
 
@@ -236,18 +256,24 @@ function initServer() {
     console.log( "Received request:", req.method, req.url )
 
     /* handle any path part replacement */
-    let url = redirectaddress( req.url )
+
+    const url = redirectaddress( req.url )
     req.url = url;
 
+    /* get relevant values from URL then call service, serve file or make proxy request */
+
     const parts = getURLParts( url )
+    const route = parts.route
+
+    const serviceName = route.slice( 1 )
 
     /* check whether service and if so call */
-    if( parts.route.slice( 1 ) in services.available ) {
-      await handleServiceCall( parts.route.slice( 1 ), parts, req, res )
+    if( serviceName in services.available ) {
+      await handleServiceCall( serviceName, parts, req, res )
     }
     /* serve file or manage proxy request */
     else {
-      const filename = ( "/" == url ) ? url += "index.html" : parts.route
+      const filename = ( "/" === url ) ? url + "index.html" : route
       await handleFileOrProxyRequest( req, res, filename )
     }
   } )
