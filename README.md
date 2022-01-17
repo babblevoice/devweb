@@ -125,7 +125,20 @@ The following values are passed to each method:
 
 1. the object parsed from the JSON config (`config`)
 2. the object returned from the utility function `getURLParts` invoked with the request URL (`parts`)
+3. the request body (`data`), if extracted (see [Other config items](#other-config-items) above), else `undefined`
+4. the lifecycle hooks object (`lifecycleHooks`)
 
-Also passed if the request body is extracted (see [Other config items](#other-config-items) above):
+## Lifecycle hooks
 
-3. the extracted request body (`data`)
+Callbacks to be invoked at given points in the request-response lifecycle can be stored on the `lifecycleHooks` object, each callback as a method on the nested object for the given lifecycle stage. Each method on a nested object is called once at the corresponding lifecycle stage.
+
+The following values are passed to each method:
+
+1. the request object (`req`)
+2. the response object (`res`)
+
+### Lifecycle stages
+
+One lifecycle stage is currently supported:
+
+1. response send, callbacks for which can be stored as methods on `lifecycleHooks.onResponseSend`
