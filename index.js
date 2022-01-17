@@ -323,6 +323,13 @@ function redirectaddress( addr ) {
   return addr
 }
 
+const runLifecycleHooks = function( stage, req, res ) {
+  Object.keys( lifecycleHooks[ stage ] )
+    .forEach( key => {
+      lifecycleHooks[ stage ][ key ]( req, res )
+    } )
+}
+
 
 /* Request handling */
 
@@ -390,10 +397,7 @@ function serveFile( req, res, filename ) {
     sendResponse( req, res, "Server error - sorry", 500 )
   } )
 
-  Object.keys( lifecycleHooks.onResponseSend )
-    .forEach( key => {
-      lifecycleHooks.onResponseSend[ key ]( req, res )
-    } )
+  runLifecycleHooks( "onResponseSend", req, res )
 
   res.writeHead( 200 )
 }
@@ -435,10 +439,7 @@ function manageProxyRequest( req, res, data ) {
 
     resp.pipe( res )
 
-    Object.keys( lifecycleHooks.onResponseSend )
-      .forEach( key => {
-        lifecycleHooks.onResponseSend[ key ]( req, res )
-      } )
+    runLifecycleHooks( "onResponseSend", req, res )
   } )
 
   httpsreq.on( "error", err => {
@@ -471,12 +472,7 @@ const handleFileOrProxyRequest = async function( req, res, filename ) {
 }
 
 const sendResponse = function( req, res, data, status = 200 ) {
-
-  Object.keys( lifecycleHooks.onResponseSend )
-    .forEach( key => {
-      lifecycleHooks.onResponseSend[ key ]( req, res )
-    } )
-
+  runLifecycleHooks( "onResponseSend", req, res )
   res.writeHead( status )
   res.end( data )
 }
