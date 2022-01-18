@@ -159,6 +159,11 @@ function setConfigItem( [ key, value ] ) {
   }
 }
 
+/* Lifecycle hooks */
+
+const lifecycleHooks = {
+  onResponseSend: {}
+}
 
 /* Startup process */
 
@@ -318,6 +323,14 @@ function redirectaddress( addr ) {
   return addr
 }
 
+/* call each hook for a given lifecycle stage */
+const runLifecycleHooks = function( stage, req, res ) {
+  Object.values( lifecycleHooks[ stage ] )
+    .forEach( value => {
+      value( req, res )
+    } )
+}
+
 
 /* Request handling */
 
@@ -352,18 +365,18 @@ async function handleServiceCall( service, parts, req, res ) {
   let result
   /* handle service call via CLI */
   if( "undefined" === typeof req ) {
-    result = await services.available[ service ]( config, parts )
+    result = await services.available[ service ]( config, parts, undefined, lifecycleHooks )
     return result ? console.log( result ) : false
   }
   /* handle service call via URL */
   else if( !shouldExtract( req ) ) {
-    result = await services.available[ service ]( config, parts )
+    result = await services.available[ service ]( config, parts, undefined, lifecycleHooks )
   }
   else {
     const data = await extractData( req )
-    result = await services.available[ service ]( config, parts, data )
+    result = await services.available[ service ]( config, parts, data, lifecycleHooks )
   }
-  sendResponse( res, result )
+  sendResponse( req, res, result )
 }
 
 /* respond with file */
@@ -378,14 +391,16 @@ function serveFile( req, res, filename ) {
   res.setHeader( "Cache-Control", "public, max-age=0" );
   res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
 
-  res.writeHead( 200 )
-
   const stream = createReadStream( localwebroot + filename )
   stream.pipe( res )
   stream.on( "error", err => {
     console.log( `Unable to serve file ${ filename } - ${ err }` )
-    sendResponse( res, "Server error - sorry", 500 )
+    sendResponse( req, res, "Server error - sorry", 500 )
   } )
+
+  runLifecycleHooks( "onResponseSend", req, res )
+
+  res.writeHead( 200 )
 }
 
 /* respond with proxy response */
@@ -424,11 +439,13 @@ function manageProxyRequest( req, res, data ) {
     res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
 
     resp.pipe( res )
+
+    runLifecycleHooks( "onResponseSend", req, res )
   } )
 
   httpsreq.on( "error", err => {
     console.log( `Unable to complete proxy request for ${ req.method } ${ req.url } - ${ err }` )
-    sendResponse( res, "Server error - sorry", 500 )
+    sendResponse( req, res, "Server error - sorry", 500 )
   } )
 
   if( "GET" != req.method ) httpsreq.write( data )
@@ -455,7 +472,8 @@ const handleFileOrProxyRequest = async function( req, res, filename ) {
   }
 }
 
-const sendResponse = function( res, data, status = 200 ) {
+const sendResponse = function( req, res, data, status = 200 ) {
+  runLifecycleHooks( "onResponseSend", req, res )
   res.writeHead( status )
   res.end( data )
 }
