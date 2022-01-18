@@ -323,10 +323,11 @@ function redirectaddress( addr ) {
   return addr
 }
 
+/* call each hook for a given lifecycle stage */
 const runLifecycleHooks = function( stage, req, res ) {
-  Object.keys( lifecycleHooks[ stage ] )
-    .forEach( key => {
-      lifecycleHooks[ stage ][ key ]( req, res )
+  Object.values( lifecycleHooks[ stage ] )
+    .forEach( value => {
+      value( req, res )
     } )
 }
 
