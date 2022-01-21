@@ -31,7 +31,8 @@ const defaultPort = 8000
         ".html": "text/html",
         ".css": "text/css"
       },
-      "servicefilepath": "./services.js"
+      "servicefilepath": "./services.js",
+      "verbosity": "normal"
     }
   }
 */
@@ -41,7 +42,7 @@ const defaultPort = 8000
 const c = { ...config.devweb }
 
 let { servicefilepath } = c
-let host, port, localwebroot, proxyhost, accesstoken, addressredirects, mimemap
+let host, port, localwebroot, proxyhost, accesstoken, addressredirects, mimemap, verbosity
 
 
 /* Customization */
@@ -104,8 +105,8 @@ const options = [
 /* Option actions */
 
 function showConfigObj() {
-  console.log( "Devweb config object:" );
-  console.log( c );
+  log( "Devweb config object:" );
+  log( c );
   process.exit();
 }
 
@@ -123,18 +124,18 @@ function showHelpText() {
     ( f.long   && "--" + f.long.padEnd(  longestLong  + 3 ) ),
     ( f.intent && f.intent )
   ].join( "" ) ).join( "\n" )
-  console.log( "Options:\n" + optionsStr )
+  log( "Options:\n" + optionsStr )
   process.exit()
 }
 
 function setConfigItem( [ key, value ] ) {
   /* handle config item of primitive type */
   if( "string" === typeof c[ key ] ) {
-    console.log( `Setting ${ key } to '${ value }'` )
+    log( `Setting ${ key } to '${ value }'` )
     c[ key ] = value
   }
   if( [ "number", "boolean" ].includes( typeof c[ key ] ) ) {
-    console.log( `Setting ${ key } to ${ value }` )
+    log( `Setting ${ key } to ${ value }` )
     if( "number" === typeof c[ key ] ) value = parseInt( value )
     if( "boolean" === typeof c[ key ] ) value = value.toLowerCase() === "true" ? true : false
     c[ key ] = value
@@ -142,19 +143,19 @@ function setConfigItem( [ key, value ] ) {
   /* handle config item where array */
   else if( Array.isArray( c[ key ] ) ) {
     const valueArr = value ? value.split( "," ) : []
-    console.log( `Setting ${ key } to`, valueArr )
+    log( `Setting ${ key } to`, "medium", valueArr )
     c[ key ] = valueArr
   }
   /* handle config item of type object */
   else if( "object" === typeof c[ key ] ) {
     const valuePair = value ? value.split( ":" ) : []
-    if( 2 !== valuePair.length ) return console.log( "Command-line argument to set ${ key } unclear - not set" )
-    console.log( `Setting ${ key } to hold key '${ valuePair[ 0 ] }' with value '${ valuePair[ 1 ] }'` )
+    if( 2 !== valuePair.length ) return log( `Command-line argument to set ${ key } unclear - not set` )
+    log( `Setting ${ key } to hold key '${ valuePair[ 0 ] }' with value '${ valuePair[ 1 ] }'` )
     c[ key ] = { ...c[ key ], ...Object.fromEntries( [ valuePair ] ) }
   }
   /* handle non-config item */
   if( !Object.keys( c ).includes( key ) ) {
-    console.log( `Setting ${ key } to '${ value }'` )
+    log( `Setting ${ key } to '${ value }'` )
     c[ key ] = value
   }
 }
@@ -181,13 +182,13 @@ pullConfig()
 
 fs.access( servicefilepath )
   .then( () => {
-    console.log( `Including services in file ${ servicefilepath }` )
+    log( `Including services in file ${ servicefilepath }` )
     services = { available: { ...services.available, ...require( servicefilepath ).available } }
     const availableStr = Object.keys( services.available ).map( key => " /" + key ).join( "\n" )
-    console.log( availableStr ? "Available:\n" + availableStr : "No services made available" )
+    log( availableStr ? "Available:\n" + availableStr : "No services made available" )
   } )
   .catch( err => {
-    console.log( `Unable to use services file - ${ err }` )
+    log( `Unable to use services file - ${ err }` )
   } )
   .then( () => {
     handleArgsServices()
@@ -209,17 +210,17 @@ function handleArgsFlags() {
     options.forEach( option => {
       if( arg !== "-" + option.short && arg !== "--" + option.long ) return
       usedArg = true
-      console.log( "Applying option for flag", arg )
+      log( `Applying option for flag ${ arg }` )
       const nextInd = argInd + 1
       const optPars = option.params || 0
       const allPars = optPars && args.slice( nextInd, nextInd + optPars )
-      if( allPars.length < optPars ) return console.log( "Insufficient arguments to option", arg )
+      if( allPars.length < optPars ) return log( `Insufficient arguments to option ${ arg }` )
       allPars
         ? option.action( allPars.length === 1 ? allPars[ 0 ] : allPars )
         : option.action()
     } )
 
-    if( !usedArg ) console.log( "No option found for argument", arg )
+    if( !usedArg ) log( `No option found for argument ${ arg }` )
   } )
 }
 
@@ -234,7 +235,7 @@ function handleArgsServices() {
     const parts = getURLParts( arg )
     const serviceName = parts.route.slice( 1 )
 
-    if( !( serviceName in services.available ) ) return console.log( "No service found for argument", arg )
+    if( !( serviceName in services.available ) ) return log( `No service found for argument ${ arg }` )
 
     await handleServiceCall( serviceName, parts )
   } )
@@ -250,7 +251,8 @@ function pullConfig() {
       addressredirects,
       extractioncriteria = [ "method" ],
       mimemap,
-      servicefilepath
+      servicefilepath,
+      verbosity = "normal"
     } = c )
 }
 
@@ -258,7 +260,7 @@ function initServer() {
 
   const server = http.createServer( async function ( req, res ) {
 
-    console.log( "Received request:", req.method, req.url )
+    log( `Received request: ${ req.method } ${ req.url }` )
 
     /* handle any path part replacement */
 
@@ -284,12 +286,28 @@ function initServer() {
   } )
 
   server.listen( port, host, () => {
-    console.log( `Serving from directory ${ localwebroot } at http://${ host }:${ port }` )
+    log( `Serving from directory ${ localwebroot } at http://${ host }:${ port }` )
   } )
 }
 
 
 /* Utility functions */
+
+/* log message to console if verbosity allows */
+function log( msg, priority = "medium", ...otherMsgs ) {
+  const pLvls = {
+    high:    1,
+    medium:  2,
+    low:     3
+  }
+  const vLvls = {
+    silent:  0,
+    quiet:   1,
+    normal:  2,
+    verbose: 3
+  }
+  if( pLvls[ priority ] <= vLvls[ verbosity || c.verbosity ] ) console.log( msg, ...otherMsgs )
+}
 
 /* return object containing URL parts */
 function getURLParts( url ) {
@@ -317,7 +335,7 @@ function redirectaddress( addr ) {
   for ( key in addressredirects ) {
     if( 0 == addr.indexOf( key ) ) {
       addr = addr.replace( key, addressredirects[ key ] )
-      console.log( `Redirecting to ${ addr }` )
+      log( `Redirecting to ${ addr }` )
     }
   }
   return addr
@@ -360,13 +378,13 @@ async function extractData( req ) {
 /* make service call and respond with result or log if any */
 async function handleServiceCall( service, parts, req, res ) {
 
-  console.log( `Calling service ${ service }` )
+  log( `Calling service ${ service }` )
 
   let result
   /* handle service call via CLI */
   if( "undefined" === typeof req ) {
     result = await services.available[ service ]( config, parts, undefined, lifecycleHooks )
-    return result ? console.log( result ) : false
+    return result ? log( result ) : false
   }
   /* handle service call via URL */
   else if( !shouldExtract( req ) ) {
@@ -382,7 +400,7 @@ async function handleServiceCall( service, parts, req, res ) {
 /* respond with file */
 function serveFile( req, res, filename ) {
 
-  console.log( `Serving local copy of ${ filename.slice( 1 ) }` )
+  log( `Serving local copy of ${ filename.slice( 1 ) }` )
 
   const filext = /(?:\.([^.]+))?$/.exec( req.url )
   const mimetype = mimemap[ filext[ 0 ] ] || "text/html"
@@ -394,7 +412,7 @@ function serveFile( req, res, filename ) {
   const stream = createReadStream( localwebroot + filename )
   stream.pipe( res )
   stream.on( "error", err => {
-    console.log( `Unable to serve file ${ filename } - ${ err }` )
+    log( `Unable to serve file ${ filename } - ${ err }` )
     sendResponse( req, res, "Server error - sorry", 500 )
   } )
 
@@ -406,7 +424,7 @@ function serveFile( req, res, filename ) {
 /* respond with proxy response */
 function manageProxyRequest( req, res, data ) {
 
-  console.log( `Passing request to server` )
+  log( `Passing request to server` )
 
   /* default options object for GET method */
   const options = {
@@ -426,9 +444,9 @@ function manageProxyRequest( req, res, data ) {
 
   const httpsreq = https.request( options, resp => {
 
-    console.log( "Received response for request", req.method, req.url )
-    console.log( "- statusCode:", resp.statusCode)
-    console.log( "- headers:", resp.headers)
+    log( `Received response for request ${ req.method } ${ req.url }` )
+    log( `- statusCode: ${ resp.statusCode }` )
+    log( "- headers:", "medium", resp.headers )
 
     if( 404 === resp.statusCode ) {
       return sendResponse( res, "Not found on remote", 404 )
@@ -444,7 +462,7 @@ function manageProxyRequest( req, res, data ) {
   } )
 
   httpsreq.on( "error", err => {
-    console.log( `Unable to complete proxy request for ${ req.method } ${ req.url } - ${ err }` )
+    log( `Unable to complete proxy request for ${ req.method } ${ req.url } - ${ err }` )
     sendResponse( req, res, "Server error - sorry", 500 )
   } )
 
