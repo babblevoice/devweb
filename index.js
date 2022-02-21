@@ -392,15 +392,12 @@ function serveFile( req, res, filename ) {
   res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
 
   const stream = createReadStream( localwebroot + filename )
-  stream.pipe( res )
   stream.on( "error", err => {
     console.log( `Unable to serve file ${ filename } - ${ err }` )
     sendResponse( req, res, "Server error - sorry", 500 )
   } )
 
-  runLifecycleHooks( "onResponseSend", req, res )
-
-  res.writeHead( 200 )
+  sendResponse( req, res, stream )
 }
 
 /* respond with proxy response */
@@ -431,16 +428,14 @@ function manageProxyRequest( req, res, data ) {
     console.log( "- headers:", resp.headers)
 
     if( 404 === resp.statusCode ) {
-      return sendResponse( res, "Not found on remote", 404 )
+      return sendResponse( req, res, "Not found on remote", 404 )
     }
 
     res.setHeader( "Content-Type", resp.headers[ "content-type" ] )
     res.setHeader( "Cache-Control", "public, max-age=0" );
     res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
 
-    resp.pipe( res )
-
-    runLifecycleHooks( "onResponseSend", req, res )
+    sendResponse( req, res, resp )
   } )
 
   httpsreq.on( "error", err => {
@@ -473,7 +468,12 @@ const handleFileOrProxyRequest = async function( req, res, filename ) {
 }
 
 const sendResponse = function( req, res, data, status = 200 ) {
+
   runLifecycleHooks( "onResponseSend", req, res )
+
+  /* pipe data if stream */
+  if( data && data?._readableState ) return data.pipe( res )
+
   res.writeHead( status )
   res.end( data )
 }
