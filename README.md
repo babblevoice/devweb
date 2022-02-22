@@ -139,6 +139,7 @@ The following values are passed to each method:
 
 ### Lifecycle stages
 
-One lifecycle stage is currently supported:
+Two lifecycle stages are currently supported:
 
-1. response send, callbacks for which can be stored as methods on `lifecycleHooks.onResponseSend`
+1. request receive, callbacks for which can be stored as methods on `lifecycleHooks.onRequestReceive`
+2. response send, callbacks for which can be stored as methods on `lifecycleHooks.onResponseSend`

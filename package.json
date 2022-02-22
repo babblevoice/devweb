@@ -1,6 +1,6 @@
 {
   "name": "devweb",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "Our dev server",
   "main": "index.js",
   "scripts": {
