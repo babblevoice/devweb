@@ -162,6 +162,7 @@ function setConfigItem( [ key, value ] ) {
 /* Lifecycle hooks */
 
 const lifecycleHooks = {
+  onRequestReceive: {},
   onResponseSend: {}
 }
 
@@ -256,9 +257,11 @@ function pullConfig() {
 
 function initServer() {
 
-  const server = http.createServer( async function ( req, res ) {
+  async function handleRequest( req, res ) {
 
     console.log( "Received request:", req.method, req.url )
+
+    runLifecycleHooks( "onRequestReceive", req, res )
 
     /* handle any path part replacement */
 
@@ -278,10 +281,11 @@ function initServer() {
     }
     /* serve file or manage proxy request */
     else {
-      const filename = ( "/" === url ) ? url + "index.html" : route
-      await handleFileOrProxyRequest( req, res, filename )
+      await handleFileOrProxyRequest( req, res, route )
     }
-  } )
+  }
+
+  const server = http.createServer( handleRequest )
 
   server.listen( port, host, () => {
     console.log( `Serving from directory ${ localwebroot } at http://${ host }:${ port }` )
@@ -447,13 +451,14 @@ function manageProxyRequest( req, res, data ) {
   httpsreq.end()
 }
 
-const handleFileOrProxyRequest = async function( req, res, filename ) {
+const handleFileOrProxyRequest = async function( req, res, name ) {
 
   /* check whether file and if not assume URL and make request */
   try {
 
-    await fs.access( localwebroot + filename )
-    serveFile( req, res, filename )
+    if( "/" === name.slice( -1 ) ) name += "index.html"
+    await fs.access( localwebroot + name )
+    serveFile( req, res, name )
 
   } catch {
 
