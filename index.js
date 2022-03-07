@@ -88,17 +88,36 @@ const options = [
     action: showConfigObj
   },
   {
-    long:   "help",
-    short:  "h",
-    intent: "show help text and exit",
-    action: showHelpText
-  },
-  {
     long:   "set",
     short:  "s",
     intent: "set a config item, arrays comma-separated (e.g. -s arr \"1,2\") & nested key-value pairs colon-separated (e.g. -s obj \"k:v\")",
     params: 2,
     action: setConfigItem
+  },
+  /* verbosity */
+  {
+    long:   "silent",
+    short:  "S",
+    intent: "set the verbosity config item to 'silent'",
+    action: () => { c.verbosity = "silent" }
+  },
+  {
+    long:   "quiet",
+    short:  "q",
+    intent: "set the verbosity config item to 'quiet'",
+    action: () => { c.verbosity = "quiet" }
+  },
+  {
+    long:   "verbose",
+    short:  "v",
+    intent: "set the verbosity config item to 'verbose'",
+    action: () => { c.verbosity = "verbose" }
+  },
+  {
+    long:   "help",
+    short:  "h",
+    intent: "show help text and exit",
+    action: showHelpText
   }
 ]
 
@@ -124,7 +143,7 @@ function showHelpText() {
     ( f.long   && "--" + f.long.padEnd(  longestLong  + 3 ) ),
     ( f.intent && f.intent )
   ].join( "" ) ).join( "\n" )
-  log( "Options:\n" + optionsStr )
+  console.log( "Options:\n" + optionsStr )
   process.exit()
 }
 
@@ -211,7 +230,7 @@ function handleArgsFlags() {
     options.forEach( option => {
       if( arg !== "-" + option.short && arg !== "--" + option.long ) return
       usedArg = true
-      log( `Applying option for flag ${ arg }` )
+      log( `Applying option for flag ${ arg }`, "low" )
       const nextInd = argInd + 1
       const optPars = option.params || 0
       const allPars = optPars && args.slice( nextInd, nextInd + optPars )
