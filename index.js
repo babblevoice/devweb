@@ -162,7 +162,7 @@ function setConfigItem( [ key, value ] ) {
   /* handle config item where array */
   else if( Array.isArray( c[ key ] ) ) {
     const valueArr = value ? value.split( "," ) : []
-    log( `Setting ${ key } to`, "medium", valueArr )
+    log( `Setting ${ key } to`, "medium", () => valueArr )
     c[ key ] = valueArr
   }
   /* handle config item of type object */
@@ -316,8 +316,8 @@ function initServer() {
 
 /* Utility functions */
 
-/* log message to console if verbosity allows */
-function log( msg, priority = "medium", ...otherMsgs ) {
+/* log message and return value of any callback to console if verbosity allows */
+async function log( msg, priority = "medium", cb ) {
   const pLvls = {
     high:    1,
     medium:  2,
@@ -329,7 +329,7 @@ function log( msg, priority = "medium", ...otherMsgs ) {
     normal:  2,
     verbose: 3
   }
-  if( pLvls[ priority ] <= vLvls[ verbosity || c.verbosity ] ) console.log( msg, ...otherMsgs )
+  if( pLvls[ priority ] <= vLvls[ verbosity || c.verbosity ] ) cb ? console.log( msg, await cb() ) : console.log( msg )
 }
 
 /* return object containing URL parts */
@@ -424,6 +424,7 @@ async function handleServiceCall( service, parts, req, res ) {
 function serveFile( req, res, filename ) {
 
   log( `Serving local copy of ${ filename.slice( 1 ) }` )
+  log( "-", "low", async () => await fs.stat( localwebroot + filename ) )
 
   const filext = /(?:\.([^.]+))?$/.exec( req.url )
   const mimetype = mimemap[ filext[ 0 ] ] || "text/html"
@@ -462,11 +463,13 @@ function manageProxyRequest( req, res, data ) {
     options.headers[ "Content-Length" ] = req.headers[ "content-length" ]
   }
 
+  log( "- headers:", "low", () => req.headers )
+
   const httpsreq = https.request( options, resp => {
 
     log( `Received response for request ${ req.method } ${ req.url }` )
     log( `- statusCode: ${ resp.statusCode }` )
-    log( "- headers:", "medium", resp.headers )
+    log( "- headers:", "medium", () => resp.headers )
 
     if( 404 === resp.statusCode ) {
       return sendResponse( req, res, "Not found on remote", 404 )
