@@ -163,6 +163,7 @@ function setConfigItem( [ key, value ] ) {
 /* Lifecycle hooks */
 
 const lifecycleHooks = {
+  onRequestReceive: {},
   onResponseSend: {}
 }
 
@@ -258,9 +259,11 @@ function pullConfig() {
 
 function initServer() {
 
-  const server = http.createServer( async function ( req, res ) {
+  async function handleRequest( req, res ) {
 
     log( `Received request: ${ req.method } ${ req.url }` )
+
+    runLifecycleHooks( "onRequestReceive", req, res )
 
     /* handle any path part replacement */
 
@@ -280,10 +283,11 @@ function initServer() {
     }
     /* serve file or manage proxy request */
     else {
-      const filename = ( "/" === url ) ? url + "index.html" : route
-      await handleFileOrProxyRequest( req, res, filename )
+      await handleFileOrProxyRequest( req, res, route )
     }
-  } )
+  }
+
+  const server = http.createServer( handleRequest )
 
   server.listen( port, host, () => {
     log( `Serving from directory ${ localwebroot } at http://${ host }:${ port }` )
@@ -410,15 +414,12 @@ function serveFile( req, res, filename ) {
   res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
 
   const stream = createReadStream( localwebroot + filename )
-  stream.pipe( res )
   stream.on( "error", err => {
     log( `Unable to serve file ${ filename } - ${ err }` )
     sendResponse( req, res, "Server error - sorry", 500 )
   } )
 
-  runLifecycleHooks( "onResponseSend", req, res )
-
-  res.writeHead( 200 )
+  sendResponse( req, res, stream )
 }
 
 /* respond with proxy response */
@@ -449,16 +450,14 @@ function manageProxyRequest( req, res, data ) {
     log( "- headers:", "medium", resp.headers )
 
     if( 404 === resp.statusCode ) {
-      return sendResponse( res, "Not found on remote", 404 )
+      return sendResponse( req, res, "Not found on remote", 404 )
     }
 
     res.setHeader( "Content-Type", resp.headers[ "content-type" ] )
     res.setHeader( "Cache-Control", "public, max-age=0" );
     res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
 
-    resp.pipe( res )
-
-    runLifecycleHooks( "onResponseSend", req, res )
+    sendResponse( req, res, resp )
   } )
 
   httpsreq.on( "error", err => {
@@ -470,13 +469,14 @@ function manageProxyRequest( req, res, data ) {
   httpsreq.end()
 }
 
-const handleFileOrProxyRequest = async function( req, res, filename ) {
+const handleFileOrProxyRequest = async function( req, res, name ) {
 
   /* check whether file and if not assume URL and make request */
   try {
 
-    await fs.access( localwebroot + filename )
-    serveFile( req, res, filename )
+    if( "/" === name.slice( -1 ) ) name += "index.html"
+    await fs.access( localwebroot + name )
+    serveFile( req, res, name )
 
   } catch {
 
@@ -491,7 +491,12 @@ const handleFileOrProxyRequest = async function( req, res, filename ) {
 }
 
 const sendResponse = function( req, res, data, status = 200 ) {
+
   runLifecycleHooks( "onResponseSend", req, res )
+
+  /* pipe data if stream */
+  if( data && data?._readableState ) return data.pipe( res )
+
   res.writeHead( status )
   res.end( data )
 }
