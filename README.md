@@ -46,10 +46,12 @@ You will require a config directory containing a default.json file, with content
 
 Four levels of verbosity are available:
 
-- silent
-- quiet
-- normal, the default value
-- verbose
+- `silent`
+- `quiet`
+- `normal`, the default value
+- `verbose`
+
+Logging at `normal` includes the response status code and headers, while logging at `verbose` includes also the stats object for each local file served and the request headers passed onward.
 
 ### Other config items
 
