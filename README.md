@@ -36,10 +36,22 @@ You will require a config directory containing a default.json file, with content
       ".html": "text/html",
       ".css": "text/css"
     },
-    "servicefilepath": "./services.js"
+    "servicefilepath": "./services.js",
+    "verbosity": "normal"
   }
 }
 ```
+
+### Verbosity
+
+Four levels of verbosity are available:
+
+- `silent`
+- `quiet`
+- `normal`, the default value
+- `verbose`
+
+Logging at `normal` includes the response status code and headers, while logging at `verbose` includes also the stats object for each local file served and the request headers passed onward.
 
 ### Other config items
 
@@ -101,11 +113,14 @@ const options = [
 
 ## Default options
 
-Three default options are available:
+Six default options are available:
 
 - `--config/-c`, to show the devweb config object then exit
+- `--set/-s`, to set a config item, overriding if present or adding otherwise
+- `--silent/-S`, to set the verbosity config item to `silent`
+- `--quiet/-q`, to set the verbosity config item to `quiet`
+- `--verbose/-v`, to set the verbosity config item to `verbose`
 - `--help/-h`, to show the help text then exit
-- `--set/-s`, to set a config value, overriding if present or adding otherwise
 
 ## Service provision
 
