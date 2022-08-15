@@ -394,7 +394,9 @@ async function extractData( req ) {
   for await ( chunk of req ) {
     chunks.push( chunk );
   }
-  const data = Buffer.concat( chunks ).toString()
+  let data = Buffer.concat( chunks )
+  /* convert to UTF-8 string unless multipart/form-data */
+  if( !req.headers[ "content-type" ].includes( "multipart/form-data" ) ) data = data.toString()
   return data
 }
 
