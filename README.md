@@ -2,6 +2,20 @@
 
 A simple web proxy server to help develop a local web app against a remote API server (or similar structure).
 
+- [Installation](#installation)
+- [Configuration](#configuration)
+  - [Service file path](#service-file-path)
+  - [Verbosity](#verbosity)
+  - [Other config items](#other-config-items)
+- [Server startup](#server-startup)
+  - [Passing arguments](#passing-arguments)
+    - [Default options](#default-options)
+- [Option definition](#option-definition)
+- [Service provision](#service-provision)
+  - [ES Modules](#es-modules)
+- [Lifecycle hooks](#lifecycle-hooks)
+  - [Lifecycle stages](#lifecycle-stages)
+
 ## Installation
 
 The file package.json lists the packages used. There are currently two, the dependency `config`, which is required, and the devDependency `nodemon`, which is optional.
@@ -42,6 +56,12 @@ You will require a config directory containing a default.json file, with content
 }
 ```
 
+Config can be set and shown by means of a CLI flag. See [Default options](#default-options) below.
+
+### Service file path
+
+Services extending devweb functionality can be provided in a dedicated file located at the path specified. See [Service provision](#service-provision) below.
+
 ### Verbosity
 
 Four levels of verbosity are available:
@@ -52,6 +72,8 @@ Four levels of verbosity are available:
 - `verbose`
 
 Logging at `normal` includes the response status code and headers, while logging at `verbose` includes also the stats object for each local file served and the request headers passed onward.
+
+Verbosity can also be set by means of a dedicated CLI flag. See [Default options](#default-options) below.
 
 ### Other config items
 
@@ -80,7 +102,7 @@ nodemon index.js
 
 The server runs at `localhost:8000`.
 
-## Startup arguments
+### Passing arguments
 
 One or more arguments can be passed to the server at startup. These are listed after the name of the file. Each argument is assumed to be:
 
@@ -91,7 +113,24 @@ One or more arguments can be passed to the server at startup. These are listed a
 node index.js --flag -f /service?key=value
 ```
 
+If nodemon is used, the arguments are passed after the separator `--`:
+
+```shell
+nodemon index.js -- --flag -f /service?key=value
+```
+
 Any option flags passed are parsed first to allow a service file path to be set or overridden, then any service names.
+
+#### Default options
+
+Six default options are available:
+
+- `--config/-c`, to show the devweb config object then exit
+- `--set/-s`, to set a config item, overriding if present or adding otherwise
+- `--silent/-S`, to set the verbosity config item to `silent`
+- `--quiet/-q`, to set the verbosity config item to `quiet`
+- `--verbose/-v`, to set the verbosity config item to `verbose`
+- `--help/-h`, to show the help text then exit
 
 ## Option definition
 
@@ -111,20 +150,9 @@ const options = [
 ]
 ```
 
-## Default options
-
-Six default options are available:
-
-- `--config/-c`, to show the devweb config object then exit
-- `--set/-s`, to set a config item, overriding if present or adding otherwise
-- `--silent/-S`, to set the verbosity config item to `silent`
-- `--quiet/-q`, to set the verbosity config item to `quiet`
-- `--verbose/-v`, to set the verbosity config item to `verbose`
-- `--help/-h`, to show the help text then exit
-
 ## Service provision
 
-Services can be provided in a services.js file, with content corresponding to the following structure:
+Services can be provided in a dedicated JavaScript file located at the path specified in config, with content corresponding to the following structure:
 
 ```js
 module.exports.available = {
@@ -134,7 +162,7 @@ module.exports.available = {
 };
 ```
 
-If the services.js file is found at the service file path specified in config/default.json, the methods on its `available` object are imported. If a route called matches the name of a method, the method is invoked and its return value passed back.
+If the services file is found, the methods on its `available` object are imported. If a route called matches the name of a method, the method is invoked and its return value passed back.
 
 The following values are passed to each method:
 
@@ -142,6 +170,10 @@ The following values are passed to each method:
 2. the object returned from the utility function `getURLParts` invoked with the request URL (`parts`)
 3. the request body (`data`), if extracted (see [Other config items](#other-config-items) above), else `undefined`
 4. the lifecycle hooks object (`lifecycleHooks`)
+
+### ES Modules
+
+If the services file is located in a project using ES Modules, with the `type` key in its package.json set to `module`, the file can be given the `.cjs` extension.
 
 ## Lifecycle hooks
 
