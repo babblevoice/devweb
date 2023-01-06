@@ -473,15 +473,11 @@ function manageProxyRequest( req, res, data ) {
     log( `- statusCode: ${ resp.statusCode }` )
     log( "- headers:", "medium", () => resp.headers )
 
-    if( 404 === resp.statusCode ) {
-      return sendResponse( req, res, "Not found on remote", 404 )
-    }
-
     res.setHeader( "Content-Type", resp.headers[ "content-type" ] )
     res.setHeader( "Cache-Control", "public, max-age=0" );
     res.setHeader( "Expires", new Date( Date.now() ).toUTCString() )
 
-    sendResponse( req, res, resp )
+    sendResponse( req, res, resp, resp.statusCode )
   } )
 
   httpsreq.on( "error", err => {
@@ -518,9 +514,10 @@ const sendResponse = function( req, res, data, status = 200 ) {
 
   runLifecycleHooks( "onResponseSend", req, res )
 
+  res.writeHead( status )
+
   /* pipe data if stream */
   if( data && data?._readableState ) return data.pipe( res )
 
-  res.writeHead( status )
   res.end( data )
 }
